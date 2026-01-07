@@ -1,0 +1,30 @@
+# Общие артефакты
+.DS_Store
+node_modules
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.env
+.env.local
+
+# Клиент
+client/node_modules
+client/build
+client/.env.local
+client/.DS_Store
+
+# Сервер
+server/node_modules
+server/dist
+server/data/dev.db
+server/data/uploads
+server/.env.local
+server/.DS_Store
+
+# Prisma/tsc
+server/prisma/*.db
+server/prisma/*.db-journal
+server/prisma/migrations
+
+# Logs
+*.log
