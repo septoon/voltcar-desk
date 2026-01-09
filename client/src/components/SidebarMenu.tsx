@@ -340,7 +340,7 @@ export const SidebarMenu = ({ mobileOpen, onClose }: Props) => {
               expanded ? "block" : "hidden",
             ].join(" ")}
           >
-            Вольт Авто Desk
+            Симферополь, п. Айкаван, ул. Айвазовского, д. 21
           </div>
           <button
             className="mt-2 w-full rounded-lg border border-[#d6d6d6] bg-white px-2 py-2 text-[12px] font-semibold text-[#c2410c] hover:bg-[#fff3e6]"

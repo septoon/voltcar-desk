@@ -417,7 +417,7 @@ export const HomePage = () => {
             </div>
             <div>Авто: {selected.vehicle ?? "—"}</div>
             <div>
-              Время: {new Date(selected.start).toLocaleString()}
+              Дата и время: {new Date(selected.start).toLocaleString()}
             </div>
             <div>Примечание: {selected.note ?? "—"}</div>
           </div>
