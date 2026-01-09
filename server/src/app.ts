@@ -3,6 +3,7 @@ import express, { NextFunction, Request, Response } from "express";
 import helmet from "helmet";
 import morgan from "morgan";
 import cookieParser from "cookie-parser";
+import { config } from "./config";
 import { healthRouter } from "./routes/health";
 import { authRouter } from "./routes/auth";
 import { ordersRouter } from "./routes/orders";
@@ -11,13 +12,20 @@ import { servicesRouter } from "./routes/services";
 import { appointmentsRouter } from "./routes/appointments";
 import { requireAuth } from "./middleware/auth";
 
+const allowedOrigins = new Set(config.corsOrigins);
+const allowAllOrigins = allowedOrigins.has("*");
+
 export const createApp = () => {
   const app = express();
 
   app.use(helmet());
   app.use(
     cors({
-      origin: true,
+      origin(origin, callback) {
+        if (allowAllOrigins || !origin) return callback(null, true);
+        if (allowedOrigins.has(origin)) return callback(null, true);
+        return callback(new Error("Not allowed by CORS"));
+      },
       credentials: true,
     }),
   );

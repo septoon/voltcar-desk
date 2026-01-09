@@ -1,10 +1,11 @@
 import axios, { AxiosError, AxiosRequestConfig, AxiosResponse } from "axios";
 import { clearToken, getToken, setToken } from "../auth/token";
 
-const API_BASE = process.env.REACT_APP_API_URL || "/";
+const API_BASE =
+  (process.env.REACT_APP_API_URL || "https://api.crm.lumastack.ru").replace(/\/+$/, "") || "https://api.crm.lumastack.ru";
 
 export const api = axios.create({
-  baseURL: API_BASE,
+  baseURL: API_BASE || "/",
   withCredentials: true,
 });
 

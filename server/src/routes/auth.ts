@@ -1,4 +1,4 @@
-import { Router } from "express";
+import { Router, type CookieOptions } from "express";
 import jwt from "jsonwebtoken";
 import { config } from "../config";
 import { createRefreshToken, findValidRefreshToken, rotateRefreshToken, revokeRefreshToken } from "../services/refreshStore";
@@ -12,6 +12,15 @@ const signAccess = (subject: string) =>
     { expiresIn: config.accessTtl } as jwt.SignOptions
   );
 
+const refreshCookieOptions = (): CookieOptions => ({
+  httpOnly: true,
+  secure: config.cookieSecure,
+  sameSite: config.cookieSameSite,
+  path: "/api/auth",
+  maxAge: config.refreshTtlDays * 24 * 60 * 60 * 1000,
+  ...(config.cookieDomain ? { domain: config.cookieDomain } : {}),
+});
+
 authRouter.post("/login", (req, res) => {
   const { login, password } = req.body as { login?: string; password?: string };
   if (login !== config.authLogin || password !== config.authPassword) {
@@ -21,13 +30,7 @@ authRouter.post("/login", (req, res) => {
   const accessToken = signAccess(config.authLogin);
   createRefreshToken(config.authLogin)
     .then(({ token, row }) => {
-      res.cookie("refresh_token", token, {
-        httpOnly: true,
-        secure: true,
-        sameSite: "lax",
-        path: "/api/auth",
-        maxAge: config.refreshTtlDays * 24 * 60 * 60 * 1000,
-      });
+      res.cookie("refresh_token", token, refreshCookieOptions());
       res.json({ accessToken, refreshId: row.id });
     })
     .catch((err) => {
@@ -56,13 +59,7 @@ authRouter.post("/refresh", async (req, res) => {
     if (!row) return res.status(401).json({ error: "Неверный refresh токен" });
     const { token: newToken, row: newRow } = await rotateRefreshToken(row, row.user_id);
     const accessToken = signAccess(row.user_id);
-    res.cookie("refresh_token", newToken, {
-      httpOnly: true,
-      secure: true,
-      sameSite: "lax",
-      path: "/api/auth",
-      maxAge: config.refreshTtlDays * 24 * 60 * 60 * 1000,
-    });
+    res.cookie("refresh_token", newToken, refreshCookieOptions());
     return res.json({ accessToken, refreshId: newRow.id });
   } catch (err) {
     console.error(err);
@@ -78,6 +75,11 @@ authRouter.post("/logout", async (req, res) => {
       await revokeRefreshToken(row.id);
     }
   }
-  res.clearCookie("refresh_token", { path: "/api/auth" });
+  res.clearCookie("refresh_token", {
+    path: "/api/auth",
+    sameSite: config.cookieSameSite,
+    secure: config.cookieSecure,
+    ...(config.cookieDomain ? { domain: config.cookieDomain } : {}),
+  });
   res.status(200).json({ ok: true });
 });

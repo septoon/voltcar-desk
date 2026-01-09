@@ -1,7 +1,9 @@
 import { api } from "./api";
 import { getToken } from "../auth/token";
 
-const API_BASE = (process.env.REACT_APP_API_URL as string | undefined) || "";
+const API_BASE =
+  ((process.env.REACT_APP_API_URL as string | undefined) || "https://api.crm.lumastack.ru").replace(/\/+$/, "") ||
+  "https://api.crm.lumastack.ru";
 
 export type TicketInfo = {
   name: string;
