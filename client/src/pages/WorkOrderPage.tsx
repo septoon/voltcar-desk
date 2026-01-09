@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { useNavigate, useParams } from "react-router-dom";
 import { IMaskInput } from "react-imask";
 import { createOrder, fetchOrder, updateOrder } from "../api/orders";
@@ -75,7 +76,6 @@ export const WorkOrderPage = () => {
   const [parts, setParts] = useState<LineItem[]>([]);
   const [payments, setPayments] = useState<Payment[]>([]);
   const [showPaymentsModal, setShowPaymentsModal] = useState(false);
-  const [newPayment, setNewPayment] = useState({ date: todayString, method: "Карта", amount: "" });
   const [selectedRow, setSelectedRow] = useState<{ kind: TableKind; id: number } | null>(null);
   const [contextMenu, setContextMenu] = useState<
     | {
@@ -96,9 +96,7 @@ export const WorkOrderPage = () => {
   const [serviceHints, setServiceHints] = useState<string[]>(defaultServices);
   const [filteredHints, setFilteredHints] = useState<string[]>([]);
   const [showHintsFor, setShowHintsFor] = useState<{ kind: TableKind; id: number } | null>(null);
-  const [hintPosition, setHintPosition] = useState<{ top: number; left: number; width: number; height: number } | null>(
-    null,
-  );
+  const [hintPosition, setHintPosition] = useState<{ top: number; left: number; width: number } | null>(null);
   const hintSelectionRef = useRef(false);
   const draftKey = useMemo(() => `order-draft-${orderNumber || "new"}`, [orderNumber]);
   const [discountPercent, setDiscountPercent] = useState("0");
@@ -109,6 +107,13 @@ export const WorkOrderPage = () => {
   const autoSaveTimer = useRef<number | null>(null);
   const initialLoadedRef = useRef(false);
   const lastSavedRef = useRef<string>("");
+  const [viewportWidth, setViewportWidth] = useState<number>(typeof window !== "undefined" ? window.innerWidth : 1024);
+
+  useEffect(() => {
+    const onResize = () => setViewportWidth(window.innerWidth);
+    window.addEventListener("resize", onResize);
+    return () => window.removeEventListener("resize", onResize);
+  }, []);
 
   const servicesTotal = useMemo(() => sumLineItems(services), [services]);
   const partsTotal = useMemo(() => sumLineItems(parts), [parts]);
@@ -120,6 +125,13 @@ export const WorkOrderPage = () => {
   const orderNumberDisplay = orderNumber === "new" ? "—" : orderNumber;
   const formatSummary = (value: number) => value.toLocaleString("ru-RU", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   const parseInputNumber = (value: string) => Number(String(value).replace(",", "."));
+  const serializeOrder = (payload: OrderPayload) =>
+    JSON.stringify({
+      ...payload,
+      services: payload.services ?? [],
+      parts: payload.parts ?? [],
+      payments: payload.payments ?? [],
+    });
 
   const hasContent = () =>
     Boolean(
@@ -213,7 +225,6 @@ export const WorkOrderPage = () => {
     setServices(data.services ?? []);
     setParts(data.parts ?? []);
     setPayments(data.payments ?? []);
-    setNewPayment((prev) => ({ ...prev, date: data.date ?? todayString }));
     if (typeof data.discountPercent === "number" && !Number.isNaN(data.discountPercent)) {
       setDiscountPercent(String(data.discountPercent));
     }
@@ -240,6 +251,7 @@ export const WorkOrderPage = () => {
     if (!orderNumber || orderNumber === "new") {
       if (draft) {
         setFromOrder(draft);
+        lastSavedRef.current = serializeOrder(draft);
         if (typeof (draft as any).discountPercent === "string") setDiscountPercent((draft as any).discountPercent);
         if (typeof (draft as any).discountAmount === "string") setDiscountAmount((draft as any).discountAmount);
         if (typeof (draft as any).phone === "string") setPhone((draft as any).phone);
@@ -254,24 +266,28 @@ export const WorkOrderPage = () => {
         const data = await fetchOrder(orderNumber);
         const useDraft = draft && hasDraftContent(draft);
         if (useDraft) {
-          setFromOrder({
+          const combined: OrderPayload = {
             ...data,
             ...(draft as OrderPayload),
             services: (draft as OrderPayload).services ?? data.services,
             parts: (draft as OrderPayload).parts ?? data.parts,
             payments: (draft as OrderPayload).payments ?? data.payments,
-          });
+          };
+          setFromOrder(combined);
+          lastSavedRef.current = serializeOrder(combined);
           if (typeof (draft as any).discountPercent === "string") setDiscountPercent((draft as any).discountPercent);
           if (typeof (draft as any).discountAmount === "string") setDiscountAmount((draft as any).discountAmount);
           if (typeof (draft as any).phone === "string") setPhone((draft as any).phone);
         } else {
           setFromOrder(data);
+          lastSavedRef.current = serializeOrder(data);
         }
       } catch (err) {
         console.error(err);
         const useDraft = draft && hasDraftContent(draft);
         if (useDraft) {
           setFromOrder(draft as OrderPayload);
+          lastSavedRef.current = serializeOrder(draft as OrderPayload);
           if (typeof (draft as any).discountPercent === "string") setDiscountPercent((draft as any).discountPercent);
           if (typeof (draft as any).discountAmount === "string") setDiscountAmount((draft as any).discountAmount);
           if (typeof (draft as any).phone === "string") setPhone((draft as any).phone);
@@ -419,7 +435,7 @@ export const WorkOrderPage = () => {
       initialLoadedRef.current = true;
       return;
     }
-    if (isLocked) return;
+    if (isLocked || loading || saving || pdfLoading) return;
     if (!hasContent()) return;
     if (autoSaveTimer.current) window.clearTimeout(autoSaveTimer.current);
 
@@ -428,7 +444,7 @@ export const WorkOrderPage = () => {
         setSaving(true);
         const resolvedStatus = computeStatusForSave();
         const payload = { ...orderPayload(), status: resolvedStatus };
-        const serialized = JSON.stringify(payload);
+        const serialized = serializeOrder(payload);
         if (serialized === lastSavedRef.current) return;
         let saved: OrderPayload;
         if (!orderNumber || orderNumber === "new") {
@@ -467,12 +483,12 @@ export const WorkOrderPage = () => {
     status,
   ]);
 
-  const handleSave = async (nextStatus?: WorkStatus) => {
+  const handleSave = async (nextStatus?: WorkStatus, nextPayments?: Payment[]) => {
     try {
       setSaving(true);
       const resolvedStatus = nextStatus ?? computeStatusForSave();
       setStatus(resolvedStatus);
-      const payload = { ...orderPayload(), status: resolvedStatus };
+      const payload = { ...orderPayload(), payments: nextPayments ?? payments, status: resolvedStatus };
       let saved: OrderPayload;
       if (!orderNumber || orderNumber === "new") {
         saved = await createOrder(payload);
@@ -490,9 +506,10 @@ export const WorkOrderPage = () => {
           }
         }
       }
-      lastSavedRef.current = JSON.stringify(payload);
+      lastSavedRef.current = serializeOrder(payload);
       setStatus((saved.status as WorkStatus) ?? payload.status);
       setOrderDate(saved.date ?? orderDate ?? todayString);
+      setPayments(saved.payments ?? nextPayments ?? payments);
     } catch (err) {
       console.error(err);
       alert("Не удалось сохранить заказ");
@@ -686,14 +703,18 @@ export const WorkOrderPage = () => {
     event.preventDefault();
     try {
       setPdfLoading(true);
-      const discountCents = Math.round(discountValue * 100);
-      const totalCents = Math.round(total * 100);
-      const subtotalCents = Math.round(subtotal * 100);
+      const discountCents = Number.isFinite(discountValue) ? Math.round(discountValue * 100) : 0;
+      const totalCentsRaw = Number.isFinite(total) ? Math.round(total * 100) : 0;
+      const subtotalCentsRaw = Number.isFinite(subtotal) ? Math.round(subtotal * 100) : 0;
+      const totalCents = Number.isFinite(totalCentsRaw) ? totalCentsRaw : 0;
+      const subtotalCents = Number.isFinite(subtotalCentsRaw) ? subtotalCentsRaw : totalCents;
+      const safeCustomer = customer.trim() || "Без имени";
+      const safeReason = reason.trim() || "—";
       const res = await api.post(
         "/api/tickets/pdf",
         {
           id: orderNumberDisplay,
-          customerName: customer,
+          customerName: safeCustomer,
           vehicle: car,
           phone,
           govNumber,
@@ -703,7 +724,7 @@ export const WorkOrderPage = () => {
           date: orderDate || todayString,
           services,
           parts,
-          service: reason,
+          service: safeReason,
           totalCents,
           totalWithoutDiscountCents: subtotalCents,
           discountCents,
@@ -715,10 +736,25 @@ export const WorkOrderPage = () => {
       const blob = res.data as Blob;
       const url = window.URL.createObjectURL(blob);
       window.open(url, "_blank", "noopener");
-      await handleSave("PAYED");
+      const due = Math.max(total - paid, 0);
+      const payValue = parseInputNumber(payAmountInput);
+      const amount = Number.isFinite(payValue) && payValue > 0 ? payValue : due;
+      const newPayment: Payment = {
+        id: Date.now(),
+        date: orderDate || todayString,
+        method: payMethod,
+        amount: amount > 0 ? amount : due,
+      };
+      const nextPayments = [...payments, newPayment];
+      setPayments(nextPayments);
+      await handleSave("PAYED", nextPayments);
     } catch (err) {
       console.error(err);
-      alert("Не удалось сформировать счет-фактуру");
+      const msg =
+        (err as any)?.response?.data?.error ||
+        (err as any)?.message ||
+        "Не удалось сформировать счет-фактуру";
+      alert(msg);
     } finally {
       setPdfLoading(false);
       setShowPaymentsModal(false)
@@ -754,7 +790,7 @@ export const WorkOrderPage = () => {
   };
 
   return (
-    <div className="relative mx-auto flex flex-col gap-3 p-3 pt-12">
+    <div className="relative mx-auto flex flex-col gap-3 p-3 max-[960px]:pt-16">
       {(loading || saving || pdfLoading) && <Loader />}
 
       <header className="flex items-center justify-between gap-3 rounded-xl border border-[#e5e5e5] bg-white px-4 py-3 shadow-sm">
@@ -1007,7 +1043,6 @@ export const WorkOrderPage = () => {
                                       ? source.filter((s) => s.toLowerCase().includes(val.toLowerCase()))
                                       : source;
                                     setFilteredHints(localFiltered.slice(0, 8));
-                                    const rect = e.currentTarget.getBoundingClientRect();
                                     try {
                                       const hints = await fetchServices(val);
                                       const merged =
@@ -1021,6 +1056,12 @@ export const WorkOrderPage = () => {
                                     }
                                   }}
                                   onFocus={(e) => {
+                                    const rect = e.currentTarget.getBoundingClientRect();
+                                    setHintPosition({
+                                      top: rect.bottom + window.scrollY,
+                                      left: rect.left + window.scrollX,
+                                      width: rect.width,
+                                    });
                                     const source = serviceHints.length ? serviceHints : defaultServices;
                                     setShowHintsFor({ kind: "services", id: item.id });
                                     setFilteredHints(source.slice(0, 8));
@@ -1028,27 +1069,41 @@ export const WorkOrderPage = () => {
                                   onKeyDown={handleEditKeyDown}
                                   onBlur={handleEditBlur}
                                 />
-                                {showHintsFor?.kind === "services" && showHintsFor.id === item.id && filteredHints.length > 0 ? (
-                                  <ul className="hint-list absolute left-0 right-0 top-full z-50 max-h-48 list-none overflow-y-auto border border-[#c3c3c3] bg-white p-0 shadow">
-                                    {filteredHints.map((hint) => (
-                                      <li
-                                        key={hint}
-                                        className="cursor-pointer px-2 py-1 hover:bg-[#f0f0f0]"
-                                        onMouseDown={(e) => {
-                                          e.preventDefault();
-                                          e.stopPropagation();
-                                          hintSelectionRef.current = true;
-                                        }}
-                                        onClick={() => {
-                                          hintSelectionRef.current = false;
-                                          applyHint("services", item.id, hint);
+                                {showHintsFor?.kind === "services" &&
+                                showHintsFor.id === item.id &&
+                                filteredHints.length > 0 &&
+                                hintPosition
+                                  ? createPortal(
+                                      <ul
+                                        className="hint-list fixed z-[2000] max-h-56 list-none overflow-y-auto border border-[#c3c3c3] bg-white p-0 shadow-lg"
+                                        style={{
+                                          top: (hintPosition?.top ?? 0) + 4,
+                                          left: hintPosition?.left ?? 0,
+                                          minWidth: hintPosition?.width ?? 180,
+                                          right: viewportWidth < 480 ? 8 : undefined,
                                         }}
                                       >
-                                        {hint}
-                                      </li>
-                                    ))}
-                                  </ul>
-                                ) : null}
+                                        {filteredHints.map((hint) => (
+                                          <li
+                                            key={hint}
+                                            className="cursor-pointer px-2 py-1 hover:bg-[#f0f0f0]"
+                                            onMouseDown={(e) => {
+                                              e.preventDefault();
+                                              e.stopPropagation();
+                                              hintSelectionRef.current = true;
+                                            }}
+                                            onClick={() => {
+                                              hintSelectionRef.current = false;
+                                              applyHint("services", item.id, hint);
+                                            }}
+                                          >
+                                            {hint}
+                                          </li>
+                                        ))}
+                                      </ul>,
+                                      document.body,
+                                    )
+                                  : null}
                               </div>
                             ) : (
                               item.title

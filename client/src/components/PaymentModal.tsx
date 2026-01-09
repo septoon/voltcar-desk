@@ -61,8 +61,8 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
           </button>
         </header>
 
-        <div className="flex justify-between gap-2 rounded-lg border border-[#e5e5e5] bg-[#fafafa] p-3">
-          <div className="flex w-1/2 flex-col gap-3 rounded-lg border border-[#e5e5e5] bg-white p-3">
+        <div className="flex justify-between max-[960px]:flex-col gap-2 rounded-lg border border-[#e5e5e5] bg-[#fafafa] p-3">
+          <div className="flex w-1/2 max-[960px]:w-full flex-col gap-3 rounded-lg border border-[#e5e5e5] bg-white p-3">
             <div className="grid grid-cols-3 gap-2">
               {["7", "8", "9", "4", "5", "6", "1", "2", "3", "0", ",", "back"].map((key) => (
                 <button
@@ -110,7 +110,7 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
             </div>
           </div>
 
-          <div className="flex w-1/2 flex-col justify-between gap-3">
+          <div className="flex w-1/2 max-[960px]:w-full flex-col justify-between gap-3">
               <div className="flex flex-col">
                 <span className="text-[13px] font-semibold text-[#555555]">Способы оплаты</span>
                 <div className="flex flex-col gap-2">

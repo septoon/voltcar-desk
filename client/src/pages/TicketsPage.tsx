@@ -38,7 +38,7 @@ export const TicketsPage = () => {
   }, [tickets, query]);
 
   return (
-    <div className="mx-auto flex max-w-full flex-col gap-3 p-3 pt-12">
+    <div className="mx-auto flex max-w-full flex-col gap-3 p-3 max-[960px]:pt-16">
       <header className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-[#e5e5e5] bg-white px-4 py-3 shadow-sm">
         <div className="flex items-center gap-2">
           <h2 className="text-xl font-bold mr-4 text-[#1f1f1f]">Акты (PDF)</h2>
@@ -75,16 +75,10 @@ export const TicketsPage = () => {
             )}
             {filtered.map((t) => (
               <tr key={t.name} className="border-t border-[#ededed]">
-                <td className="px-3 py-2 font-semibold text-[#1f1f1f]">{t.name}</td>
+                <td className="px-3 py-2 font-semibold text-indigo-700 underline cursor-pointer" onClick={() => window.open(ticketUrl(t.name, false), "_blank", "noopener")}>{t.name}</td>
                 <td className="px-3 py-2 text-[#4b5563]">{new Date(t.mtime).toLocaleString("ru-RU")}</td>
                 <td className="px-3 py-2 text-[#4b5563]">{formatSize(t.size)}</td>
                 <td className="px-3 py-2 space-x-2">
-                  <button
-                    className="rounded-md border border-[#c3c3c3] bg-white px-3 py-1 text-sm font-semibold text-[#1f1f1f] hover:bg-[#f5f5f5]"
-                    onClick={() => window.open(ticketUrl(t.name, false), "_blank", "noopener")}
-                  >
-                    Открыть
-                  </button>
                   <a
                     className="rounded-md border border-[#caa200] bg-[#ffd659] px-3 py-1 text-sm font-semibold text-[#1f1f1f] hover:bg-[#f3c945]"
                     href={ticketUrl(t.name, true)}

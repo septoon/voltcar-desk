@@ -17,6 +17,8 @@ const uploadDir = normalizePath(process.env.UPLOAD_DIR ?? "", path.join("data", 
 const jwtSecret = process.env.JWT_SECRET ?? "change-me";
 const authLogin = process.env.AUTH_LOGIN ?? "admin";
 const authPassword = process.env.AUTH_PASSWORD ?? "admin";
+const accessTtl = process.env.ACCESS_TTL ?? "15m";
+const refreshTtlDays = Number(process.env.REFRESH_TTL_DAYS ?? 30);
 
 fs.mkdirSync(path.dirname(dbPath), { recursive: true });
 fs.mkdirSync(uploadDir, { recursive: true });
@@ -33,4 +35,6 @@ export const config = {
   databaseUrl,
   authLogin,
   authPassword,
+  accessTtl,
+  refreshTtlDays,
 };

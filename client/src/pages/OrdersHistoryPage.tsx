@@ -117,17 +117,20 @@ export const OrdersHistoryPage = () => {
   }, []);
 
   return (
-    <div className="mx-auto flex max-w-full flex-col gap-3 p-3 pt-12">
+    <div className="mx-auto flex max-w-full flex-col gap-3 p-3 max-[960px]:pt-16">
       <header className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-[#e5e5e5] bg-white px-4 py-3 shadow-sm">
-        <div className="flex items-center gap-2">
-          <h2 className="text-xl font-bold mr-4 text-[#1f1f1f]">История заказов</h2>
-          <input
-            type="text"
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            placeholder="Поиск по номеру"
-            className="w-56 rounded-md border border-[#cfcfcf] bg-white px-3 py-2 text-sm focus:outline-none"
-          />
+        <div className="flex items-center justify-between gap-2 max-[960px]:flex-col w-full">
+         <div className="flex max-[960px]:w-full max-[960px]:justify-between">
+           <h2 className="text-xl font-bold mr-4 text-[#1f1f1f]">История заказов</h2>
+            <input
+              type="text"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="Поиск по номеру"
+              className="w-56 max-[960px]:w-[40%] rounded-md border border-[#cfcfcf] bg-white px-3 py-2 text-sm focus:outline-none"
+            />
+         </div>
+         <div className="flex gap-3 max-[960px]:w-full max-[960px]:justify-between">
           <label className="flex items-center gap-2">
             Статус
             <select
@@ -141,7 +144,7 @@ export const OrdersHistoryPage = () => {
               <option value="PAYED">{statusLabels.PAYED}</option>
             </select>
           </label>
-        </div>
+
           <button
             className="rounded-md border border-[#d6d6d6] bg-[#f5f5f5] px-3 py-2 text-sm font-semibold text-[#2c2c2c] shadow-sm hover:bg-[#ededed] disabled:cursor-not-allowed disabled:opacity-60"
             disabled={!selectedId || normalizeStatus(orders.find((o) => o.id === selectedId)?.status) === "PAYED"}
@@ -149,6 +152,8 @@ export const OrdersHistoryPage = () => {
           >
             Удалить
           </button>
+         </div>
+        </div>
       </header>
 
       {loading && <Loader />}

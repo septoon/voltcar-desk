@@ -239,33 +239,18 @@ export const SidebarMenu = ({ mobileOpen, onClose }: Props) => {
 
   const expanded = mobileOpen || hovered || window.innerWidth > 960;
 
-  // "MUI Drawer widths" (mini + expanded)
-  const MINI_W = 72;
-  const FULL_W = 288;
-
   return (
-    <>
-      {/* Backdrop for mobile */}
-      {mobileOpen && (
-        <button
-          aria-label="Close sidebar"
-          className="fixed inset-0 z-30 bg-black/40 max-[960px]:block hidden"
-          onClick={onClose}
-        />
-      )}
-
-      <nav
+          <nav
         onMouseEnter={() => setHovered(true)}
         onMouseLeave={() => setHovered(false)}
         className={[
-          "z-40 bg-white border-r border-slate-200 flex flex-col sticky top-0 self-start h-[calc(100vh-0px)]",
-          "max-[960px]:fixed max-[960px]:top-0 max-[960px]:bottom-0 max-[960px]:left-0 max-[960px]:z-40",
-          "max-[960px]:transition-transform max-[960px]:duration-200 max-[960px]:ease-out",
-          mobileOpen ? "max-[960px]:translate-x-0" : "max-[960px]:-translate-x-full",
-          "shadow-[0_1px_2px_rgba(0,0,0,0.06)]",
+          "z-[40] bg-white border-r border-slate-200 flex flex-col sticky top-0 self-start h-[calc(100vh-0px)]",
+          "max-[960px]:fixed max-[960px]:top-0 max-[960px]:bottom-0 max-[960px]:left-0",
+          "max-[960px]:w-full max-[960px]:transition-transform max-[960px]:duration-200 max-[960px]:ease-out",
+          mobileOpen ? "max-[960px]:translate-x-0 max-[960px]:w-full" : "max-[960px]:-translate-x-full",
+          "shadow-[0_10px_30px_rgba(0,0,0,0.18)]",
         ].join(" ")}
         style={{
-          width: expanded ? FULL_W : MINI_W,
           transition: "width 180ms ease",
         }}
       >
@@ -295,13 +280,14 @@ export const SidebarMenu = ({ mobileOpen, onClose }: Props) => {
             const isNewAndCreating = item.key === "new" && creating;
 
             return (
-              <div key={item.key} className="px-2">
-                <button
-                  onClick={() => handleClick(item.key, item.path)}
-                  disabled={isNewAndCreating}
-                  title={item.label}
-                  className={[
-                    "w-full relative flex items-center gap-3 rounded-xl px-3 py-2",
+          <div key={item.key} className="px-2">
+            <button
+              type="button"
+              onClick={() => handleClick(item.key, item.path)}
+              disabled={isNewAndCreating}
+              title={item.label}
+              className={[
+                "w-full relative flex items-center gap-3 rounded-xl px-3 py-2",
                     "transition-colors duration-150",
                     selected
                       ? "bg-indigo-50 text-indigo-700"
@@ -368,6 +354,5 @@ export const SidebarMenu = ({ mobileOpen, onClose }: Props) => {
           </button>
         </div>
       </nav>
-    </>
   );
 };

@@ -10,7 +10,7 @@ const start = async () => {
 
   const app = createApp();
   app.listen(config.port, () => {
-    console.log(`Server listening on http://localhost:${config.port}`);
+    console.log(`Server listening on https://api.crm.lumastack.ru:${config.port}`);
   });
 };
 

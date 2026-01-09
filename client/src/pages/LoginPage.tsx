@@ -16,7 +16,7 @@ export const LoginPage = () => {
       setLoading(true);
       setError("");
       const res = await api.post("/api/auth/login", { login, password });
-      setToken(res.data.token);
+      setToken(res.data.accessToken);
       navigate("/", { replace: true });
     } catch (err: any) {
       const message = err?.response?.data?.error || "Ошибка входа";

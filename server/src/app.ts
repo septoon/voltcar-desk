@@ -2,6 +2,7 @@ import cors from "cors";
 import express, { NextFunction, Request, Response } from "express";
 import helmet from "helmet";
 import morgan from "morgan";
+import cookieParser from "cookie-parser";
 import { healthRouter } from "./routes/health";
 import { authRouter } from "./routes/auth";
 import { ordersRouter } from "./routes/orders";
@@ -14,8 +15,14 @@ export const createApp = () => {
   const app = express();
 
   app.use(helmet());
-  app.use(cors());
+  app.use(
+    cors({
+      origin: true,
+      credentials: true,
+    }),
+  );
   app.use(express.json({ limit: "2mb" }));
+  app.use(cookieParser());
   app.use(morgan("dev"));
 
   app.use("/api/health", healthRouter);

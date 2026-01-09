@@ -47,7 +47,7 @@ export const ClientSearchPage = () => {
   }, [orders, query]);
 
   return (
-    <div className="mx-auto flex flex-col gap-3 p-3 pt-12">
+    <div className="mx-auto flex flex-col gap-3 p-3 max-[960px]:pt-16">
       <header className="flex w-full flex-wrap items-center justify-between gap-3 rounded-xl border border-[#e5e5e5] bg-white px-4 py-3 shadow-sm">
         <h2 className="text-xl font-bold text-[#1f1f1f]">Поиск клиента</h2>
         <div className="min-w-[300px]">

@@ -173,7 +173,7 @@ export const HomePage = () => {
   };
 
   return (
-    <div className="relative mx-auto flex max-w-full flex-col gap-3 p-4 pt-12 bg-[#f6f7fb]">
+    <div className="relative mx-auto flex max-w-full flex-col gap-3 p-4 max-[960px]:pt-16 bg-[#f6f7fb]">
       {loading ? <Loader /> : null}
       <header className="flex items-center justify-between rounded-2xl bg-white px-4 py-3 shadow-sm">
         <div className="flex items-center gap-3">
@@ -192,7 +192,7 @@ export const HomePage = () => {
         </div>
       </header>
 
-      <div className="grid grid-cols-[1fr_300px] gap-4 max-[960px]:grid-cols-1">
+      <div className="grid grid-cols-[1fr_300px] gap-4 max-[960px]:grid-cols-1 max-[960px]:flex max-[960px]:flex-col-reverse">
         <div className="rounded-2xl border border-[#e3e7ff] bg-white p-2 shadow-sm cursor-pointer">
           <FullCalendar
             ref={calendarRef}
