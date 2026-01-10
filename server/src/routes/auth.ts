@@ -12,6 +12,15 @@ const signAccess = (subject: string) =>
     { expiresIn: config.accessTtl } as jwt.SignOptions
   );
 
+const accessCookieOptions = (): CookieOptions => ({
+  httpOnly: true,
+  secure: config.cookieSecure,
+  sameSite: config.cookieSameSite,
+  path: "/",
+  maxAge: 15 * 60 * 1000,
+  ...(config.cookieDomain ? { domain: config.cookieDomain } : {}),
+});
+
 const refreshCookieOptions = (): CookieOptions => ({
   httpOnly: true,
   secure: config.cookieSecure,
@@ -28,6 +37,7 @@ authRouter.post("/login", (req, res) => {
   }
 
   const accessToken = signAccess(config.authLogin);
+  res.cookie("access_token", accessToken, accessCookieOptions());
   createRefreshToken(config.authLogin)
     .then(({ token, row }) => {
       res.cookie("refresh_token", token, refreshCookieOptions());
@@ -40,9 +50,12 @@ authRouter.post("/login", (req, res) => {
 });
 
 authRouter.get("/me", (req, res) => {
-  const authHeader = req.headers.authorization;
-  const token = authHeader?.startsWith("Bearer ") ? authHeader.slice(7) : undefined;
+  const token = req.headers.authorization?.startsWith("Bearer ")
+    ? req.headers.authorization.slice(7)
+    : (req.cookies?.access_token as string | undefined);
+
   if (!token) return res.status(401).json({ error: "Нет токена" });
+
   try {
     jwt.verify(token, config.jwtSecret);
     return res.json({ login: config.authLogin });
@@ -60,6 +73,7 @@ authRouter.post("/refresh", async (req, res) => {
     const { token: newToken, row: newRow } = await rotateRefreshToken(row, row.user_id);
     const accessToken = signAccess(row.user_id);
     res.cookie("refresh_token", newToken, refreshCookieOptions());
+    res.cookie("access_token", accessToken, accessCookieOptions());
     return res.json({ accessToken, refreshId: newRow.id });
   } catch (err) {
     console.error(err);
@@ -77,6 +91,12 @@ authRouter.post("/logout", async (req, res) => {
   }
   res.clearCookie("refresh_token", {
     path: "/api/auth",
+    sameSite: config.cookieSameSite,
+    secure: config.cookieSecure,
+    ...(config.cookieDomain ? { domain: config.cookieDomain } : {}),
+  });
+  res.clearCookie("access_token", {
+    path: "/",
     sameSite: config.cookieSameSite,
     secure: config.cookieSecure,
     ...(config.cookieDomain ? { domain: config.cookieDomain } : {}),

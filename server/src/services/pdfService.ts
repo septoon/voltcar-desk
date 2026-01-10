@@ -26,7 +26,9 @@ export type TicketPayload = {
   issuedAt?: string;
 };
 
-const templatePath = path.resolve(__dirname, "..", "..", "templates", "ticket.html");
+// Use process.cwd() so dist build can find templates in the project root.
+const templatesDir = path.resolve(process.cwd(), "templates");
+const templatePath = path.join(templatesDir, "ticket.html");
 
 const replacePlaceholders = (template: string, replacements: Record<string, string>) =>
   template.replace(/{{\s*(\w+)\s*}}/g, (_match, key: string) => replacements[key] ?? "");
@@ -37,7 +39,7 @@ const formatCurrency = (cents: number) =>
 export const generateTicketPdf = async (payload: TicketPayload) => {
   const issuedAt = payload.issuedAt ? new Date(payload.issuedAt) : new Date();
   const template = await fs.readFile(templatePath, "utf-8");
-  const logoBuffer = await fs.readFile(path.resolve(__dirname, "..", "..", "templates", "volt_logo_pdf.png"));
+  const logoBuffer = await fs.readFile(path.join(templatesDir, "volt_logo_pdf.png"));
   const logoSrc = `data:image/png;base64,${logoBuffer.toString("base64")}`;
 
   const servicesCents = payload.services
@@ -126,10 +128,27 @@ export const generateTicketPdf = async (payload: TicketPayload) => {
     logoSrc,
   });
 
-  const browser = await puppeteer.launch({
+  const launchArgs = [
+    "--no-sandbox",
+    "--disable-setuid-sandbox",
+    "--disable-dev-shm-usage",
+    "--disable-gpu",
+    "--single-process",
+    "--no-zygote",
+  ];
+
+  const launchOptions: Parameters<typeof puppeteer.launch>[0] = {
     headless: true,
-    args: ["--no-sandbox", "--disable-setuid-sandbox"],
-  });
+    args: launchArgs,
+  };
+  if (process.env.PUPPETEER_EXECUTABLE_PATH) {
+    launchOptions.executablePath = process.env.PUPPETEER_EXECUTABLE_PATH;
+  }
+  if (process.env.PUPPETEER_CHANNEL) {
+    launchOptions.channel = process.env.PUPPETEER_CHANNEL as any;
+  }
+
+  const browser = await puppeteer.launch(launchOptions);
   try {
     const page = await browser.newPage();
     await page.setContent(renderedHtml, { waitUntil: "networkidle0" });
