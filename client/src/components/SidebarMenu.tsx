@@ -11,6 +11,7 @@ const items = [
   { key: "history", label: "История заказов", path: "/orders/history", icon: "archive" as const },
   { key: "tickets", label: "Акты", path: "/tickets", icon: "document" as const },
   { key: "clients", label: "Найти клиента", path: "/clients/search", icon: "search" as const },
+  { key: "services", label: "Услуги", path: "/services", icon: "tools" as const },
   { key: "revenue", label: "Данные по выручкам", path: "/reports/revenue", icon: "chart" as const },
 ];
 
@@ -185,6 +186,33 @@ const Icon = ({ name, active }: { name: IconName; active: boolean }) => {
           />
         </svg>
       );
+
+    case "tools":
+      return (
+        <svg {...common}>
+          <path
+            d="M12.5 4a4 4 0 0 0-3.7 5.2l-4.8 4.8a1.5 1.5 0 0 0 0 2.1l2 2a1.5 1.5 0 0 0 2.1 0l4.8-4.8A4 4 0 1 0 12.5 4Z"
+            stroke={stroke}
+            strokeWidth={strokeWidth}
+            strokeLinecap={strokeLinecap}
+            strokeLinejoin={strokeLinejoin}
+          />
+          <path
+            d="M16.3 15.8 20 19.5"
+            stroke={stroke}
+            strokeWidth={strokeWidth}
+            strokeLinecap={strokeLinecap}
+            strokeLinejoin={strokeLinejoin}
+          />
+          <path
+            d="M15 19 19 15"
+            stroke={stroke}
+            strokeWidth={strokeWidth}
+            strokeLinecap={strokeLinecap}
+            strokeLinejoin={strokeLinejoin}
+          />
+        </svg>
+      );
   }
 };
 
@@ -199,6 +227,7 @@ export const SidebarMenu = ({ mobileOpen, onClose }: Props) => {
     if (location.pathname.startsWith("/orders/history")) return "history";
     if (location.pathname.startsWith("/tickets")) return "tickets";
     if (location.pathname.startsWith("/clients")) return "clients";
+    if (location.pathname.startsWith("/services")) return "services";
     if (location.pathname.startsWith("/reports/revenue")) return "revenue";
     if (location.pathname.startsWith("/orders/")) return "new";
     return "";

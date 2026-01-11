@@ -88,7 +88,9 @@ export const RevenuePage = () => {
     const start = from ? new Date(from) : null;
     const end = to ? new Date(to) : null;
     const filtered = orders.filter((o) => {
-      if (status && normalizeStatus(o.status) !== status) return false;
+      const normalized = normalizeStatus(o.status);
+      if (normalized !== "PAYED") return false;
+      if (status && normalized !== status) return false;
       const date = parseDate(o.date);
       if (start && date && date < start) return false;
       if (end && date && date > end) return false;
