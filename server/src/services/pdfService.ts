@@ -3,6 +3,7 @@ import path from "path";
 import puppeteer from "puppeteer";
 import { config } from "../config";
 import * as numberWords from "number-to-words-ru";
+import fsSync from "fs";
 
 export type TicketPayload = {
   id?: string | number;
@@ -137,18 +138,38 @@ export const generateTicketPdf = async (payload: TicketPayload) => {
     "--no-zygote",
   ];
 
-  const launchOptions: Parameters<typeof puppeteer.launch>[0] = {
+  const customExecutable = process.env.PUPPETEER_EXECUTABLE_PATH;
+  const hasCustomExecutable = !!customExecutable;
+  const customExecutableExists = hasCustomExecutable && fsSync.existsSync(customExecutable);
+  const baseLaunchOptions: Parameters<typeof puppeteer.launch>[0] = {
     headless: true,
     args: launchArgs,
   };
-  if (process.env.PUPPETEER_EXECUTABLE_PATH) {
-    launchOptions.executablePath = process.env.PUPPETEER_EXECUTABLE_PATH;
-  }
-  if (process.env.PUPPETEER_CHANNEL) {
-    launchOptions.channel = process.env.PUPPETEER_CHANNEL as any;
-  }
+  const buildOptions = (useCustomExecutable: boolean): Parameters<typeof puppeteer.launch>[0] => {
+    const options = { ...baseLaunchOptions };
+    if (useCustomExecutable && customExecutableExists && customExecutable) {
+      options.executablePath = customExecutable;
+    }
+    if (process.env.PUPPETEER_CHANNEL) {
+      options.channel = process.env.PUPPETEER_CHANNEL as any;
+    }
+    return options;
+  };
 
-  const browser = await puppeteer.launch(launchOptions);
+  let browser: Awaited<ReturnType<typeof puppeteer.launch>>;
+  try {
+    browser = await puppeteer.launch(buildOptions(true));
+  } catch (error) {
+    if (hasCustomExecutable) {
+      console.warn(
+        "Puppeteer failed with custom executable, retrying with bundled Chromium",
+        (error as Error).message || error,
+      );
+      browser = await puppeteer.launch(buildOptions(false));
+    } else {
+      throw error;
+    }
+  }
   try {
     const page = await browser.newPage();
     await page.setContent(renderedHtml, { waitUntil: "networkidle0" });

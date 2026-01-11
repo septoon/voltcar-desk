@@ -256,7 +256,6 @@ export const RevenuePage = () => {
           </div>
           <div className="mt-1 flex items-center justify-between border-t border-[#ededed] pt-2 max-[960px]:w-full">
             <span className="text-[#555555]">Итоговая сумма:</span>
-            <span className="text-[#555555]">Начисленная выручка:</span>
             <span className="text-[16px] font-bold text-[#4e79a7]">
               {stats.total.toLocaleString("ru-RU", { minimumFractionDigits: 2 })} <span className="text-[#4e79a7]">₽</span>
             </span>
