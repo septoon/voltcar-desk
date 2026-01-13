@@ -81,10 +81,6 @@ export const OrdersHistoryPage = () => {
   const handleDelete = async (id: string) => {
     const order = orders.find((o) => o.id === id);
     if (!order) return;
-    if (normalizeStatus(order.status) === "PAYED") {
-      alert("Оплаченные заказы удалять нельзя");
-      return;
-    }
     if (!window.confirm(`Удалить заказ ${id}?`)) return;
     try {
       setLoading(true);
@@ -147,7 +143,7 @@ export const OrdersHistoryPage = () => {
 
           <button
             className="rounded-md border border-[#d6d6d6] bg-[#f5f5f5] px-3 py-2 text-sm font-semibold text-[#2c2c2c] shadow-sm hover:bg-[#ededed] disabled:cursor-not-allowed disabled:opacity-60"
-            disabled={!selectedId || normalizeStatus(orders.find((o) => o.id === selectedId)?.status) === "PAYED"}
+            disabled={!selectedId}
             onClick={() => selectedId && handleDelete(selectedId)}
           >
             Удалить
@@ -173,7 +169,6 @@ export const OrdersHistoryPage = () => {
           <tbody>
             {filtered.map((order) => {
               const isSelected = selectedId === order.id;
-              const isPayed = normalizeStatus(order.status) === "PAYED";
               return (
                 <tr
                   key={order.id}
@@ -211,7 +206,6 @@ export const OrdersHistoryPage = () => {
         >
           <button
             className="block rounded-md w-full px-3 py-2 text-left text-sm hover:bg-[#f5f5f5] disabled:cursor-not-allowed disabled:opacity-60"
-            disabled={normalizeStatus(orders.find((o) => o.id === contextMenu.id)?.status) === "PAYED"}
             onClick={() => handleDelete(contextMenu.id)}
           >
             Удалить

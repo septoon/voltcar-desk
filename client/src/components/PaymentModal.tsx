@@ -56,7 +56,7 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
             <h3 className="text-lg font-semibold text-[#1f1f1f]">Оплата заказа</h3>
             <p className="text-sm text-[#555555]">Заказ № {orderNumber}</p>
           </div>
-          <button className={`${ghostBtn} ${smallBtn}`} onClick={onClose}>
+          <button className={`${ghostBtn} ${smallBtn} rounded-md`} onClick={onClose}>
             Закрыть
           </button>
         </header>

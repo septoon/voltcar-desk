@@ -2,7 +2,7 @@ import FullCalendar from "@fullcalendar/react";
 import dayGridPlugin from "@fullcalendar/daygrid";
 import interactionPlugin from "@fullcalendar/interaction";
 import ruLocale from "@fullcalendar/core/locales/ru";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { createAppointment, deleteAppointment, fetchAppointments, updateAppointment } from "../api/appointments";
 import { fetchServices } from "../api/services";
 import { Appointment, AppointmentPayload, AppointmentStatus } from "../types/appointment";
@@ -65,7 +65,7 @@ export const HomePage = () => {
   const [appointments, setAppointments] = useState<Appointment[]>([]);
   const [view, setView] = useState<"dayGridMonth">("dayGridMonth");
   const [range, setRange] = useState<{ start?: string; end?: string }>({});
-  const [filters, setFilters] = useState<{ statuses: AppointmentStatus[]; masterId?: string }>({ statuses: [] });
+  const [filters] = useState<{ statuses: AppointmentStatus[]; masterId?: string }>({ statuses: [] });
   const [selected, setSelected] = useState<Appointment | null>(null);
   const [modalOpen, setModalOpen] = useState(false);
   const [draft, setDraft] = useState<Draft | null>(null);

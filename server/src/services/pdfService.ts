@@ -172,8 +172,9 @@ export const generateTicketPdf = async (payload: TicketPayload) => {
   }
   try {
     const page = await browser.newPage();
-    await page.setContent(renderedHtml, { waitUntil: "networkidle0" });
-    const pdfBuffer = await page.pdf({ format: "A4", printBackground: true });
+    page.setDefaultNavigationTimeout(60000);
+    await page.setContent(renderedHtml, { waitUntil: "domcontentloaded", timeout: 60000 });
+    const pdfBuffer = await page.pdf({ format: "A4", printBackground: true, timeout: 60000 });
 
     const filename = `ticket-${payload.id ?? issuedAt.getTime()}.pdf`;
     const outputPath = path.join(config.uploadDir, filename);

@@ -104,6 +104,10 @@ export const WorkOrderPage = () => {
   const [pdfLoading, setPdfLoading] = useState(false);
   const [payMethod, setPayMethod] = useState<"cash" | "card">("cash");
   const [payAmountInput, setPayAmountInput] = useState<string>("0");
+  const [showInvoiceModal, setShowInvoiceModal] = useState(false);
+  const [invoiceUrl, setInvoiceUrl] = useState<string | null>(null);
+  const [invoiceLoading, setInvoiceLoading] = useState(false);
+  const [invoiceError, setInvoiceError] = useState<string | null>(null);
   const autoSaveTimer = useRef<number | null>(null);
   const initialLoadedRef = useRef(false);
   const lastSavedRef = useRef<string>("");
@@ -114,6 +118,12 @@ export const WorkOrderPage = () => {
     window.addEventListener("resize", onResize);
     return () => window.removeEventListener("resize", onResize);
   }, []);
+
+  useEffect(() => {
+    return () => {
+      if (invoiceUrl) URL.revokeObjectURL(invoiceUrl);
+    };
+  }, [invoiceUrl]);
 
   const servicesTotal = useMemo(() => sumLineItems(services), [services]);
   const partsTotal = useMemo(() => sumLineItems(parts), [parts]);
@@ -684,7 +694,6 @@ export const WorkOrderPage = () => {
   };
 
   const deleteSelected = (kind: TableKind) => {
-    if (isLocked) return;
     if (!selectedRow || selectedRow.kind !== kind) return;
     if (!window.confirm("Удалить строку?")) return;
     if (kind === "services") {
@@ -703,39 +712,6 @@ export const WorkOrderPage = () => {
     event.preventDefault();
     try {
       setPdfLoading(true);
-      const discountCents = Number.isFinite(discountValue) ? Math.round(discountValue * 100) : 0;
-      const totalCentsRaw = Number.isFinite(total) ? Math.round(total * 100) : 0;
-      const subtotalCentsRaw = Number.isFinite(subtotal) ? Math.round(subtotal * 100) : 0;
-      const totalCents = Number.isFinite(totalCentsRaw) ? totalCentsRaw : 0;
-      const subtotalCents = Number.isFinite(subtotalCentsRaw) ? subtotalCentsRaw : totalCents;
-      const safeCustomer = customer.trim() || "Без имени";
-      const safeReason = reason.trim() || "—";
-      const res = await api.post(
-        "/api/tickets/pdf",
-        {
-          id: orderNumberDisplay,
-          customerName: safeCustomer,
-          vehicle: car,
-          phone,
-          govNumber,
-          vinNumber,
-          mileage: mileage ? Number(mileage) : null,
-          status,
-          date: orderDate || todayString,
-          services,
-          parts,
-          service: safeReason,
-          totalCents,
-          totalWithoutDiscountCents: subtotalCents,
-          discountCents,
-          discountPercent: Number(discountPercent) || 0,
-          notes: "",
-        },
-        { responseType: "blob" },
-      );
-      const blob = res.data as Blob;
-      const url = window.URL.createObjectURL(blob);
-      window.open(url, "_blank", "noopener");
       const due = Math.max(total - paid, 0);
       const payValue = parseInputNumber(payAmountInput);
       const amount = Number.isFinite(payValue) && payValue > 0 ? payValue : due;
@@ -748,6 +724,8 @@ export const WorkOrderPage = () => {
       const nextPayments = [...payments, newPayment];
       setPayments(nextPayments);
       await handleSave("PAYED", nextPayments);
+      setShowPaymentsModal(false);
+      openInvoiceModal();
     } catch (err) {
       console.error(err);
       const msg =
@@ -757,7 +735,6 @@ export const WorkOrderPage = () => {
       alert(msg);
     } finally {
       setPdfLoading(false);
-      setShowPaymentsModal(false)
     }
   };
 
@@ -789,6 +766,90 @@ export const WorkOrderPage = () => {
     });
   };
 
+  const generateInvoice = async () => {
+    setInvoiceLoading(true);
+    setInvoiceError(null);
+    setInvoiceUrl(null);
+    try {
+      const discountCents = Number.isFinite(discountValue) ? Math.round(discountValue * 100) : 0;
+      const totalCentsRaw = Number.isFinite(total) ? Math.round(total * 100) : 0;
+      const subtotalCentsRaw = Number.isFinite(subtotal) ? Math.round(subtotal * 100) : 0;
+      const totalCents = Number.isFinite(totalCentsRaw) ? totalCentsRaw : 0;
+      const subtotalCents = Number.isFinite(subtotalCentsRaw) ? subtotalCentsRaw : totalCents;
+      const safeCustomer = customer.trim() || "Без имени";
+      const safeReason = reason.trim() || "—";
+      const res = await api.post(
+        "/api/tickets/pdf",
+        {
+          id: orderNumberDisplay,
+          customerName: safeCustomer,
+          vehicle: car,
+          phone,
+          govNumber,
+          vinNumber,
+          mileage: mileage ? Number(mileage) : null,
+          status: "PAYED",
+          date: orderDate || todayString,
+          services,
+          parts,
+          service: safeReason,
+          totalCents,
+          totalWithoutDiscountCents: subtotalCents,
+          discountCents,
+          discountPercent: Number(discountPercent) || 0,
+          notes: "",
+        },
+        { responseType: "blob" },
+      );
+      const blob = res.data as Blob;
+      const url = window.URL.createObjectURL(blob);
+      setInvoiceUrl(url);
+    } catch (err) {
+      console.error(err);
+      const msg =
+        (err as any)?.response?.data?.error ||
+        (err as any)?.message ||
+        "Не удалось сформировать счет-фактуру. Попробуйте ещё раз.";
+      setInvoiceError(msg);
+    } finally {
+      setInvoiceLoading(false);
+    }
+  };
+
+  const buildTicketLink = (fileName: string) => {
+    const path = `/api/tickets/file/${encodeURIComponent(fileName)}`;
+    const base = api.defaults.baseURL || window.location.origin;
+    try {
+      return new URL(path, base).toString();
+    } catch {
+      return path;
+    }
+  };
+
+  const openInvoiceModal = () => {
+    setShowInvoiceModal(true);
+    setInvoiceError(null);
+    if (!invoiceUrl && !invoiceLoading) {
+      generateInvoice();
+    }
+  };
+
+  const openInvoicePdf = async () => {
+    const fileName = `ticket-${orderNumberDisplay}.pdf`;
+    const link = buildTicketLink(fileName);
+    if (invoiceUrl) {
+      window.open(invoiceUrl, "_blank", "noopener,noreferrer");
+      return;
+    }
+    try {
+      await api.head(`/api/tickets/file/${encodeURIComponent(fileName)}`);
+      window.open(link, "_blank", "noopener,noreferrer");
+      return;
+    } catch {
+      openInvoiceModal();
+    }
+  };
+
   return (
     <div className="relative mx-auto flex flex-col gap-3 p-3 max-[960px]:pt-16">
       {(loading || saving || pdfLoading) && <Loader />}
@@ -805,7 +866,7 @@ export const WorkOrderPage = () => {
         </span>
       </header>
 
-      <fieldset disabled={isLocked} className="contents">
+      <fieldset className="contents">
       <section className="header-grid grid grid-cols-1 gap-3 rounded-xl border border-[#e5e5e5] bg-white p-4 shadow-sm md:grid-cols-2">
         <div className="field flex flex-col gap-1">
           <label className="text-[13px] font-semibold text-[#2c2c2c]">Заказчик</label>
@@ -1285,17 +1346,26 @@ export const WorkOrderPage = () => {
               </div>
             </div>
 
-            <button
-              disabled={status === "PAYED" || status === "NEW"}
-              className={`rounded-md w-full mt-4 border px-4 py-2 text-[14px] font-semibold shadow-sm ${
-                status === "PAYED"
-                  ? "cursor-not-allowed border-[#d6d6d6] bg-[#f0f0f0] text-[#888888]"
-                  : "border-[#e2b007] bg-[#ffd54f] text-[#1f1f1f] hover:bg-[#ffc930]"
-              }`}
-              onClick={() => setShowPaymentsModal(true)}
-            >
-            Принять оплату
-          </button>
+            {status === "PAYED" ? (
+              <button
+                className="rounded-md w-full mt-4 border px-4 py-2 text-[14px] font-semibold shadow-sm border-[#1f8f3a] bg-[#1fad4c] text-white hover:bg-[#179340]"
+                onClick={() => openInvoicePdf()}
+              >
+                Счет-фактура
+              </button>
+            ) : (
+              <button
+                disabled={status === "NEW"}
+                className={`rounded-md w-full mt-4 border px-4 py-2 text-[14px] font-semibold shadow-sm ${
+                  status === "NEW"
+                    ? "cursor-not-allowed border-[#d6d6d6] bg-[#f0f0f0] text-[#888888]"
+                    : "border-[#e2b007] bg-[#ffd54f] text-[#1f1f1f] hover:bg-[#ffc930]"
+                }`}
+                onClick={() => setShowPaymentsModal(true)}
+              >
+                Принять оплату
+              </button>
+            )}
           </div>
         </div>
       </section>
@@ -1333,6 +1403,61 @@ export const WorkOrderPage = () => {
         ghostBtn={ghostBtn}
         smallBtn={smallBtn}
       />
+      {showInvoiceModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-3" onClick={() => setShowInvoiceModal(false)}>
+          <div
+            className="w-full max-w-lg rounded-xl border border-[#dcdcdc] bg-white p-5 shadow-lg"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <p className="text-xs uppercase tracking-wide text-[#6c6c6c]">Оплата проведена</p>
+                <h3 className="text-xl font-bold text-[#1f1f1f]">Заказ № {orderNumberDisplay}</h3>
+              </div>
+              <button className={`${ghostBtn} ${smallBtn} rounded-md`} onClick={() => setShowInvoiceModal(false)}>
+                Закрыть
+              </button>
+            </div>
+
+            <div className="mt-4 rounded-lg border border-[#e5e5e5] bg-[#fafafa] p-3">
+              <p className="text-sm text-[#444444]">
+                Заказ успешно <span className="font-semibold text-[#1f1f1f]">Оплачен</span>!
+              </p>
+
+              <div className="mt-3 flex items-center gap-3">
+                {invoiceLoading ? (
+                  <>
+                  <p className="mt-1 text-sm text-[#444444]">Готовим счет-фактуру:</p>
+                    <div className="h-5 w-5 animate-spin rounded-full border-2 border-[#ffc930] border-t-transparent" />
+                    <span className="text-sm font-semibold text-[#1f1f1f]">Готовим PDF...</span>
+                  </>
+                ) : invoiceError ? (
+                  <div className="flex flex-col gap-2">
+                    <span className="text-sm text-[#a33030]">{invoiceError}</span>
+                    <div className="flex gap-2">
+                      <button
+                        className="rounded-md cursor-pointer border border-[#e2b007] bg-[#ffd54f] px-3 py-2 text-sm font-semibold text-[#1f1f1f] shadow-sm hover:bg-[#ffc930]"
+                        onClick={generateInvoice}
+                      >
+                        Повторить
+                      </button>
+                    </div>
+                  </div>
+                ) : invoiceUrl ? (
+                  <div className="flex items-center gap-3">
+                    <button
+                      className="rounded-md border border-[#1f8f3a] bg-[#1fad4c] px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-[#179340]"
+                      onClick={() => openInvoicePdf()}
+                    >
+                      Получить счет-фактуру
+                    </button>
+                  </div>
+                ) : null}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
       </fieldset>
 
     </div>

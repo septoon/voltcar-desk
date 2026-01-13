@@ -51,7 +51,7 @@ export const RevenuePage = () => {
   const [orders, setOrders] = useState<OrderPayload[]>([]);
   const [from, setFrom] = useState(() => formatDateInput(new Date(new Date().getFullYear(), new Date().getMonth(), 1)));
   const [to, setTo] = useState(() => formatDateInput(new Date()));
-  const [status, setStatus] = useState<"" | WorkStatus>("");
+  const [status] = useState<"" | WorkStatus>("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
@@ -82,7 +82,7 @@ export const RevenuePage = () => {
       }
     };
     load();
-  }, []);
+  }, [normalizeStatus]);
 
   const stats = useMemo(() => {
     const start = from ? new Date(from) : null;
