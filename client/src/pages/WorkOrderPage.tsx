@@ -56,6 +56,26 @@ const normalizeStatus = (value: any): WorkStatus => {
 const sumLineItems = (items: LineItem[]) => items.reduce((acc, item) => acc + item.qty * item.price, 0);
 const serviceCacheKey = "service-hints-cache";
 
+const parseDateValue = (value?: string) => {
+  if (!value) return null;
+  if (value.includes(".")) {
+    const [d, m, y] = value.split(".").map((v) => Number(v));
+    if (d && m && y) return new Date(y, m - 1, d);
+  }
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? null : date;
+};
+
+const toInputDate = (value?: string) => {
+  const parsed = parseDateValue(value);
+  return parsed ? parsed.toISOString().slice(0, 10) : "";
+};
+
+const toDisplayDate = (value?: string) => {
+  const parsed = parseDateValue(value);
+  return parsed ? parsed.toLocaleDateString("ru-RU") : "";
+};
+
 export const WorkOrderPage = () => {
   const { id } = useParams();
   const navigate = useNavigate();
@@ -108,6 +128,7 @@ export const WorkOrderPage = () => {
   const [invoiceUrl, setInvoiceUrl] = useState<string | null>(null);
   const [invoiceLoading, setInvoiceLoading] = useState(false);
   const [invoiceError, setInvoiceError] = useState<string | null>(null);
+  const [editingDate, setEditingDate] = useState(false);
   const autoSaveTimer = useRef<number | null>(null);
   const initialLoadedRef = useRef(false);
   const lastSavedRef = useRef<string>("");
@@ -766,6 +787,12 @@ export const WorkOrderPage = () => {
     });
   };
 
+  const handleDateChange = (value: string) => {
+    const display = toDisplayDate(value) || todayString;
+    setOrderDate(display);
+    setEditingDate(false);
+  };
+
   const generateInvoice = async () => {
     setInvoiceLoading(true);
     setInvoiceError(null);
@@ -857,7 +884,46 @@ export const WorkOrderPage = () => {
       <header className="flex items-center justify-between gap-3 rounded-xl border border-[#e5e5e5] bg-white px-4 py-3 shadow-sm">
         <div className="space-y-1 leading-tight">
           <h1 className="text-xl font-bold text-[#1f1f1f]">Заказ-наряд № {orderNumberDisplay}</h1>
-          <p className="muted text-sm text-[#555555]">от {orderDate || todayString}</p>
+          <div className="flex items-center gap-2 text-sm text-[#555555]">
+            <span>от {orderDate || todayString}</span>
+            <button
+              type="button"
+              className="flex h-9 w-9 items-center justify-center rounded-lg bg-slate-100 hover:bg-indigo-50 hover:text-indigo-700"
+              onClick={() => setEditingDate((prev) => !prev)}
+            >
+              <svg
+                width="16"
+                height="16"
+                viewBox="0 0 24 24"
+                fill="none"
+                xmlns="http://www.w3.org/2000/svg"
+              >
+                <path
+                  d="M4 20h4.2c.26 0 .39 0 .5-.05.1-.04.2-.1.27-.18.07-.07.12-.2.22-.45L9.5 19l-.1.22 8.76-8.76a2 2 0 0 0 0-2.83l-.79-.79a2 2 0 0 0-2.83 0L5.79 15.6c-.2.2-.3.3-.38.42-.08.11-.14.24-.17.38-.03.12-.03.26-.03.54V20Z"
+                  stroke="#1f1f1f"
+                  strokeWidth="1.6"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                />
+                <path
+                  d="m13.5 6.5 4 4"
+                  stroke="#1f1f1f"
+                  strokeWidth="1.6"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                />
+              </svg>
+            </button>
+            {editingDate ? (
+              <input
+                type="date"
+                className="rounded-md border border-[#c3c3c3] bg-white px-2 py-1 text-[13px] text-[#1f1f1f] focus:outline-none"
+                value={toInputDate(orderDate || todayString)}
+                onChange={(e) => handleDateChange(e.target.value)}
+                onBlur={() => setEditingDate(false)}
+              />
+            ) : null}
+          </div>
         </div>
         <span
           className={`status-pill inline-block rounded-md border border-[#dcdcdc] bg-[#f7f7f7] px-3 py-1 text-xs font-bold uppercase tracking-wide status-${status.toLowerCase()}`}
