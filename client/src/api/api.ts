@@ -5,6 +5,8 @@ export const api = axios.create({
   baseURL:
     (process.env.REACT_APP_API_URL || "https://api.crm.lumastack.ru").replace(/\/+$/, "") || "https://api.crm.lumastack.ru",
   withCredentials: true,
+  // Убиваем «вечные» запросы — даём максимум 5 секунд, чтобы не висеть на старте.
+  timeout: 3000,
 });
 
 let isRefreshing = false;

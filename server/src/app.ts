@@ -10,10 +10,12 @@ import { ordersRouter } from "./routes/orders";
 import { ticketsRouter } from "./routes/tickets";
 import { servicesRouter } from "./routes/services";
 import { appointmentsRouter } from "./routes/appointments";
+import { filesRouter } from "./routes/files";
 import { requireAuth } from "./middleware/auth";
 
-const allowedOrigins = new Set(config.corsOrigins);
-const allowAllOrigins = allowedOrigins.has("*");
+const configuredOrigins = config.corsOrigins.filter(Boolean);
+const allowAnyOrigin = configuredOrigins.includes("*");
+const explicitOrigins = configuredOrigins.filter((item) => item !== "*");
 
 export const createApp = () => {
   const app = express();
@@ -22,20 +24,25 @@ export const createApp = () => {
   app.use(
     cors({
       origin(origin, callback) {
-        if (allowAllOrigins || !origin) return callback(null, true);
-        if (allowedOrigins.has(origin)) return callback(null, true);
+        if (!origin) return callback(null, true);
+        if (allowAnyOrigin) return callback(null, true);
+        if (explicitOrigins.includes(origin)) return callback(null, true);
         return callback(new Error("Not allowed by CORS"));
       },
       credentials: true,
+      methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+      allowedHeaders: ["Content-Type", "Authorization", "Accept"],
     }),
   );
   app.use(express.json({ limit: "2mb" }));
   app.use(cookieParser());
   app.use(morgan("dev"));
 
+  app.use("/uploads", requireAuth, express.static(config.uploadDir));
   app.use("/api/health", healthRouter);
   app.use("/api/auth", authRouter);
   app.use(requireAuth);
+  app.use("/api/files", filesRouter);
   app.use("/api/orders", ordersRouter);
   app.use("/api/tickets", ticketsRouter);
   app.use("/api/services", servicesRouter);

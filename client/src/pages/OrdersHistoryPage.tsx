@@ -71,8 +71,25 @@ export const OrdersHistoryPage = () => {
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
+    const qDigits = q.replace(/\D/g, "");
+    const normalize = (val?: string | null) => (val ? String(val).toLowerCase() : "");
+    const digits = (val?: string | null) => (val ? String(val).replace(/\D/g, "") : "");
     return orders.filter((o) => {
-      const matchQuery = q ? o.id?.toLowerCase().includes(q) : true;
+      const haystack = [
+        normalize(o.id),
+        normalize(o.customer),
+        normalize(o.car),
+        normalize(o.govNumber),
+        normalize(o.vinNumber),
+        normalize(o.phone),
+        normalize(o.reason),
+      ]
+        .filter(Boolean)
+        .join(" ");
+
+      const haystackDigits = [digits(o.phone), digits(o.govNumber), digits(o.id)].filter(Boolean).join(" ");
+
+      const matchQuery = q ? haystack.includes(q) || (qDigits ? haystackDigits.includes(qDigits) : false) : true;
       const matchStatus = statusFilter ? normalizeStatus(o.status) === statusFilter : true;
       return matchQuery && matchStatus;
     });
@@ -85,6 +102,11 @@ export const OrdersHistoryPage = () => {
     try {
       setLoading(true);
       await deleteOrder(id);
+      try {
+        localStorage.removeItem(`order-draft-${id}`);
+      } catch {
+        // ignore localStorage errors
+      }
       setOrders((prev) => prev.filter((o) => o.id !== id));
       if (selectedId === id) setSelectedId(null);
     } catch (err) {

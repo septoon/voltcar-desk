@@ -7,6 +7,7 @@ const API_BASE =
 
 export type TicketInfo = {
   name: string;
+  ticketId?: string;
   size: number;
   mtime: string;
   url: string;
@@ -26,4 +27,10 @@ export const ticketUrl = (name: string, download = false) => {
   const qs = qp.toString();
   const base = API_BASE || "";
   return `${base}/api/tickets/file/${encodeURIComponent(name)}${qs ? `?${qs}` : ""}`;
+};
+
+export const deleteTicketFile = async (name: string, ticketId?: string) => {
+  await api.delete(`/api/tickets/file/${encodeURIComponent(name)}`, {
+    params: ticketId ? { ticketId } : undefined,
+  });
 };

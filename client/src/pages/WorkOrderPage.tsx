@@ -5,9 +5,12 @@ import { IMaskInput } from "react-imask";
 import { createOrder, fetchOrder, updateOrder } from "../api/orders";
 import { fetchServices } from "../api/services";
 import { api } from "../api/api";
+import { generateAndUploadTicketPdf } from "../features/tickets/actions/generateAndUploadTicketPdf";
+import { generateTicketPdfBlob, downloadBlob } from "../pdf/generateTicketPdf";
 import { LineItem, OrderPayload, Payment, WorkStatus } from "../types";
 import { PaymentModal } from "../components/PaymentModal";
 import { Loader } from "../components/Loader";
+import cars from "../data/cars.json";
 
 const defaultServices = [
   "Компьютерная диагностика",
@@ -115,6 +118,12 @@ export const WorkOrderPage = () => {
   const touchTimerRef = useRef<number | null>(null);
   const [serviceHints, setServiceHints] = useState<string[]>(defaultServices);
   const [filteredHints, setFilteredHints] = useState<string[]>([]);
+  const [carHints, setCarHints] = useState<string[]>([]);
+  const [carBrandMap, setCarBrandMap] = useState<Record<string, string[]>>({});
+  const [carFilteredBrands, setCarFilteredBrands] = useState<string[]>([]);
+  const [carFilteredModels, setCarFilteredModels] = useState<string[]>([]);
+  const [selectedCarBrand, setSelectedCarBrand] = useState<string | null>(null);
+  const [showCarHints, setShowCarHints] = useState(false);
   const [showHintsFor, setShowHintsFor] = useState<{ kind: TableKind; id: number } | null>(null);
   const [hintPosition, setHintPosition] = useState<{ top: number; left: number; width: number } | null>(null);
   const hintSelectionRef = useRef(false);
@@ -125,14 +134,15 @@ export const WorkOrderPage = () => {
   const [payMethod, setPayMethod] = useState<"cash" | "card">("cash");
   const [payAmountInput, setPayAmountInput] = useState<string>("0");
   const [showInvoiceModal, setShowInvoiceModal] = useState(false);
+  const [ticketPdfUrl, setTicketPdfUrl] = useState<string | null>(null);
+  const [ticketPdfPath, setTicketPdfPath] = useState<string | null>(null);
   const [invoiceUrl, setInvoiceUrl] = useState<string | null>(null);
   const [invoiceLoading, setInvoiceLoading] = useState(false);
   const [invoiceError, setInvoiceError] = useState<string | null>(null);
   const [editingDate, setEditingDate] = useState(false);
-  const autoSaveTimer = useRef<number | null>(null);
-  const initialLoadedRef = useRef(false);
   const lastSavedRef = useRef<string>("");
   const [viewportWidth, setViewportWidth] = useState<number>(typeof window !== "undefined" ? window.innerWidth : 1024);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   useEffect(() => {
     const onResize = () => setViewportWidth(window.innerWidth);
@@ -142,7 +152,7 @@ export const WorkOrderPage = () => {
 
   useEffect(() => {
     return () => {
-      if (invoiceUrl) URL.revokeObjectURL(invoiceUrl);
+      if (invoiceUrl?.startsWith("blob:")) URL.revokeObjectURL(invoiceUrl);
     };
   }, [invoiceUrl]);
 
@@ -151,7 +161,8 @@ export const WorkOrderPage = () => {
   const subtotal = servicesTotal + partsTotal;
   const paid = useMemo(() => payments.reduce((acc, payment) => acc + payment.amount, 0), [payments]);
 
-  const isLocked = status === "PAYED";
+  // Разрешаем редактировать даже оплаченные заказы (по требованию бизнеса)
+  const isLocked = false;
   const statusLabel = statusOptions.find((option) => option.value === status)?.label ?? "—";
   const orderNumberDisplay = orderNumber === "new" ? "—" : orderNumber;
   const formatSummary = (value: number) => value.toLocaleString("ru-RU", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -241,6 +252,10 @@ export const WorkOrderPage = () => {
     setContextMenu({ visible: false });
     setDiscountPercent("0");
     setDiscountAmount("0");
+    setTicketPdfUrl(null);
+    setTicketPdfPath(null);
+    setInvoiceUrl(null);
+    setInvoiceError(null);
   };
 
   const setFromOrder = (data: OrderPayload) => {
@@ -262,6 +277,8 @@ export const WorkOrderPage = () => {
     if (typeof data.discountAmount === "number" && !Number.isNaN(data.discountAmount)) {
       setDiscountAmount(String(data.discountAmount));
     }
+    setTicketPdfUrl((data as any).pdfUrl ?? null);
+    setTicketPdfPath((data as any).pdfPath ?? null);
     setPhone(data.phone ?? "");
   };
 
@@ -291,10 +308,12 @@ export const WorkOrderPage = () => {
     }
 
     const controller = new AbortController();
+    const timeoutId = window.setTimeout(() => controller.abort(), 6000);
     const load = async () => {
       try {
         setLoading(true);
-        const data = await fetchOrder(orderNumber);
+        setLoadError(null);
+        const data = await fetchOrder(orderNumber, { signal: controller.signal });
         const useDraft = draft && hasDraftContent(draft);
         if (useDraft) {
           const combined: OrderPayload = {
@@ -315,6 +334,7 @@ export const WorkOrderPage = () => {
         }
       } catch (err) {
         console.error(err);
+        setLoadError("Не удалось загрузить заказ. Проверьте соединение и обновите страницу.");
         const useDraft = draft && hasDraftContent(draft);
         if (useDraft) {
           setFromOrder(draft as OrderPayload);
@@ -326,6 +346,7 @@ export const WorkOrderPage = () => {
           resetForm();
         }
       } finally {
+        window.clearTimeout(timeoutId);
         setLoading(false);
       }
     };
@@ -409,6 +430,20 @@ export const WorkOrderPage = () => {
       }
     };
     loadServices();
+    // init car hints from bundled list
+    const source = Array.isArray(cars) ? (cars as string[]) : [];
+    const uniq = Array.from(new Set(source.map((v) => v.trim()).filter(Boolean)));
+    setCarHints(uniq);
+    const brandMap: Record<string, string[]> = {};
+    uniq.forEach((full) => {
+      const [brandRaw, ...rest] = full.split(/\s+/);
+      if (!brandRaw) return;
+      const brand = brandRaw.trim();
+      const models = brandMap[brand] ?? [];
+      models.push(full);
+      brandMap[brand] = models;
+    });
+    setCarBrandMap(brandMap);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -418,6 +453,45 @@ export const WorkOrderPage = () => {
       setFilteredHints(source.slice(0, 8));
     }
   }, [showHintsFor, serviceHints]);
+
+  const normalizeCar = (value: string) =>
+    value
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .toLowerCase();
+
+  useEffect(() => {
+    const q = normalizeCar(car);
+    if (!car || q.length < 2) {
+      setShowCarHints(false);
+      setSelectedCarBrand(null);
+      setCarFilteredBrands([]);
+      setCarFilteredModels([]);
+      return;
+    }
+
+    if (selectedCarBrand) {
+      const models = carBrandMap[selectedCarBrand] ?? [];
+      const matches = models
+        .filter((m) => normalizeCar(m).includes(q))
+        .slice(0, 10);
+      setCarFilteredModels(matches);
+      setShowCarHints(matches.length > 0);
+      return;
+    }
+
+    const brands = Object.keys(carBrandMap);
+    const matchesBrands = brands
+      .filter((b) => normalizeCar(b).includes(q))
+      .slice(0, 10);
+    const fallbackModels = carHints
+      .filter((name) => normalizeCar(name).includes(q))
+      .slice(0, 10);
+
+    setCarFilteredBrands(matchesBrands);
+    setCarFilteredModels(matchesBrands.length ? [] : fallbackModels);
+    setShowCarHints(matchesBrands.length > 0 || fallbackModels.length > 0);
+  }, [car, carBrandMap, selectedCarBrand]);
 
   useEffect(() => {
     const hideMenu = () => setContextMenu({ visible: false });
@@ -441,6 +515,9 @@ export const WorkOrderPage = () => {
     payments,
     discountPercent: Number(discountPercent) || 0,
     discountAmount: Number(discountAmount) || 0,
+    pdfUrl: ticketPdfUrl ?? undefined,
+    pdfPath: ticketPdfPath ?? undefined,
+    id: orderNumber && orderNumber !== "new" ? orderNumber : undefined,
   });
 
   const LETTERS = "АВЕКМНОРСТУХ";
@@ -460,94 +537,62 @@ export const WorkOrderPage = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [customer, phone, car, govNumber, vinNumber, mileage, reason, services, parts, payments]);
 
-  // Автосохранение на сервер при любых изменениях, если есть содержимое
-  useEffect(() => {
-    if (!initialLoadedRef.current) {
-      initialLoadedRef.current = true;
-      return;
-    }
-    if (isLocked || loading || saving || pdfLoading) return;
-    if (!hasContent()) return;
-    if (autoSaveTimer.current) window.clearTimeout(autoSaveTimer.current);
-
-    autoSaveTimer.current = window.setTimeout(async () => {
-      try {
-        setSaving(true);
-        const resolvedStatus = computeStatusForSave();
-        const payload = { ...orderPayload(), status: resolvedStatus };
-        const serialized = serializeOrder(payload);
-        if (serialized === lastSavedRef.current) return;
-        let saved: OrderPayload;
-        if (!orderNumber || orderNumber === "new") {
-          saved = await createOrder(payload);
-          navigate(`/orders/${saved.id}`, { replace: true });
-          setFromOrder(saved);
-        } else {
-          saved = await updateOrder(orderNumber, payload);
-          setFromOrder(saved);
-        }
-        lastSavedRef.current = serialized;
-      } catch (err) {
-        console.error("auto-save failed", err);
-      } finally {
-        setSaving(false);
-      }
-    }, 800);
-
-    return () => {
-      if (autoSaveTimer.current) window.clearTimeout(autoSaveTimer.current);
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [
-    customer,
-    phone,
-    car,
-    govNumber,
-    vinNumber,
-    mileage,
-    reason,
-    services,
-    parts,
-    payments,
-    discountPercent,
-    discountAmount,
-    status,
-  ]);
-
-  const handleSave = async (nextStatus?: WorkStatus, nextPayments?: Payment[]) => {
+  const handleSave = async (nextStatus?: WorkStatus, nextPayments?: Payment[]): Promise<OrderPayload | null> => {
     try {
       setSaving(true);
       const resolvedStatus = nextStatus ?? computeStatusForSave();
       setStatus(resolvedStatus);
       const payload = { ...orderPayload(), payments: nextPayments ?? payments, status: resolvedStatus };
-      let saved: OrderPayload;
+      let saved: OrderPayload | null = null;
       if (!orderNumber || orderNumber === "new") {
-        saved = await createOrder(payload);
-        navigate(`/orders/${saved.id}`);
+        const created: OrderPayload = await createOrder(payload);
+        saved = created;
+        setFromOrder(created);
+        navigate(`/orders/${created.id}`);
       } else {
         try {
-          saved = await updateOrder(orderNumber, payload);
-          setFromOrder(saved);
+          const updated: OrderPayload = await updateOrder(orderNumber, payload);
+          saved = updated;
+          setFromOrder(updated);
         } catch (err: any) {
           if (err?.status === 404) {
-            saved = await createOrder(payload);
-            navigate(`/orders/${saved.id}`);
+            const created: OrderPayload = await createOrder(payload);
+            saved = created;
+            setFromOrder(created);
+            navigate(`/orders/${created.id}`);
           } else {
             throw err;
           }
         }
       }
+      if (!saved) {
+        throw new Error("Не удалось сохранить заказ");
+      }
       lastSavedRef.current = serializeOrder(payload);
       setStatus((saved.status as WorkStatus) ?? payload.status);
       setOrderDate(saved.date ?? orderDate ?? todayString);
       setPayments(saved.payments ?? nextPayments ?? payments);
+      setTicketPdfUrl((saved as any)?.pdfUrl ?? payload.pdfUrl ?? null);
+      setTicketPdfPath((saved as any)?.pdfPath ?? payload.pdfPath ?? null);
+      return saved;
     } catch (err) {
       console.error(err);
       alert("Не удалось сохранить заказ");
+      return null;
     } finally {
       setSaving(false);
     }
   };
+
+  // Если загрузка зависла (например, таймаут запроса), выключаем лоадер через 8 секунд.
+  useEffect(() => {
+    if (!loading) return;
+    const timer = window.setTimeout(() => {
+      setLoading(false);
+      setLoadError((prev) => prev ?? "Не удалось загрузить заказ. Попробуйте обновить.");
+    }, 8000);
+    return () => window.clearTimeout(timer);
+  }, [loading]);
 
   const openContextMenu = (kind: TableKind, id: number, x: number, y: number) => {
     setSelectedRow({ kind, id });
@@ -729,6 +774,99 @@ export const WorkOrderPage = () => {
     }
   };
 
+  const toAbsoluteUrl = (url: string | null) => {
+    if (!url) return null;
+    if (url.startsWith("blob:")) return url;
+    if (/^https?:\/\//i.test(url) || url.startsWith("tauri://") || url.startsWith("https://tauri.")) return url;
+    const base = api.defaults.baseURL || window.location.origin;
+    try {
+      return new URL(url, base).toString();
+    } catch {
+      return url;
+    }
+  };
+
+  const mapOrderToTicket = (order: OrderPayload, issuedAt?: string) => ({
+    id: order.id ?? orderNumber,
+    number: order.id ?? orderNumber,
+    issuedAt: issuedAt ?? new Date().toISOString(),
+    customerName: order.customer ?? "",
+    phone: order.phone ?? "",
+    vehicle: order.car ?? "",
+    govNumber: order.govNumber ?? "",
+    vinNumber: order.vinNumber ?? "",
+    mileage: order.mileage ?? null,
+    service: order.reason ?? "",
+    services: (order.services ?? []).map((s) => ({
+      title: s.title ?? "",
+      qty: Number.isFinite(s.qty) ? Number(s.qty) : 0,
+      price: Number.isFinite(s.price) ? Number(s.price) : 0,
+    })),
+    parts: (order.parts ?? []).map((p) => ({
+      title: p.title ?? "",
+      qty: Number.isFinite(p.qty) ? Number(p.qty) : 0,
+      price: Number.isFinite(p.price) ? Number(p.price) : 0,
+    })),
+    discountPercent: order.discountPercent != null ? order.discountPercent : parseInputNumber(discountPercent) || 0,
+    discountAmount: order.discountAmount != null ? order.discountAmount : parseInputNumber(discountAmount) || 0,
+  });
+
+  const ensureSavedOrder = async (nextStatus?: WorkStatus, nextPayments?: Payment[]) => {
+    const saved = await handleSave(nextStatus, nextPayments);
+    const resolvedId = saved?.id ?? orderNumber;
+    if (!resolvedId || resolvedId === "new") {
+      throw new Error("Сохраните заказ перед генерацией PDF");
+    }
+    return { order: saved ?? { ...orderPayload(), id: resolvedId }, id: String(resolvedId) };
+  };
+
+  const generatePdfAndDownload = async () => {
+    try {
+      setPdfLoading(true);
+      const { order, id } = await ensureSavedOrder();
+      const blob = await generateTicketPdfBlob(mapOrderToTicket(order, new Date().toISOString()));
+      downloadBlob(blob, `ticket-${id}.pdf`);
+    } catch (err) {
+      console.error(err);
+      const msg = (err as any)?.message || "Не удалось сформировать PDF";
+      alert(msg);
+    } finally {
+      setPdfLoading(false);
+    }
+  };
+
+  const generatePdfAndUpload = async (resolved?: { order: OrderPayload; id: string }) => {
+    const target = resolved ?? (await ensureSavedOrder());
+    try {
+      setInvoiceLoading(true);
+      setInvoiceError(null);
+      const issuedAtIso = new Date().toISOString();
+      const result = await generateAndUploadTicketPdf({
+        orderId: target.id,
+        order: target.order,
+        issuedAt: issuedAtIso,
+      });
+      const finalOrder = result.updatedOrder ?? target.order;
+      setFromOrder(finalOrder);
+      setTicketPdfUrl((result.uploadUrl ?? (finalOrder as any).pdfUrl ?? null) as string | null);
+      setTicketPdfPath((result.uploadPath ?? (finalOrder as any).pdfPath ?? null) as string | null);
+      if (result.uploadUrl ?? (finalOrder as any).pdfUrl) {
+        setInvoiceUrl(toAbsoluteUrl(result.uploadUrl ?? (finalOrder as any).pdfUrl ?? null));
+      }
+      return result;
+    } catch (err) {
+      console.error(err);
+      const msg =
+        (err as any)?.response?.data?.error ||
+        (err as any)?.message ||
+        "Не удалось загрузить PDF на сервер. Скачайте файл локально.";
+      setInvoiceError(msg);
+      throw err;
+    } finally {
+      setInvoiceLoading(false);
+    }
+  };
+
   const handleInvoiceCreate = async (event: React.MouseEvent) => {
     event.preventDefault();
     try {
@@ -744,9 +882,16 @@ export const WorkOrderPage = () => {
       };
       const nextPayments = [...payments, newPayment];
       setPayments(nextPayments);
-      await handleSave("PAYED", nextPayments);
+      const resolved = await ensureSavedOrder("PAYED", nextPayments);
       setShowPaymentsModal(false);
-      openInvoiceModal();
+      setShowInvoiceModal(true);
+      try {
+        await generatePdfAndUpload(resolved);
+      } catch {
+        const ticket = mapOrderToTicket(resolved.order, new Date().toISOString());
+        const blob = await generateTicketPdfBlob(ticket);
+        downloadBlob(blob, `ticket-${resolved.id}.pdf`);
+      }
     } catch (err) {
       console.error(err);
       const msg =
@@ -793,93 +938,28 @@ export const WorkOrderPage = () => {
     setEditingDate(false);
   };
 
-  const generateInvoice = async () => {
-    setInvoiceLoading(true);
-    setInvoiceError(null);
-    setInvoiceUrl(null);
-    try {
-      const discountCents = Number.isFinite(discountValue) ? Math.round(discountValue * 100) : 0;
-      const totalCentsRaw = Number.isFinite(total) ? Math.round(total * 100) : 0;
-      const subtotalCentsRaw = Number.isFinite(subtotal) ? Math.round(subtotal * 100) : 0;
-      const totalCents = Number.isFinite(totalCentsRaw) ? totalCentsRaw : 0;
-      const subtotalCents = Number.isFinite(subtotalCentsRaw) ? subtotalCentsRaw : totalCents;
-      const safeCustomer = customer.trim() || "Без имени";
-      const safeReason = reason.trim() || "—";
-      const res = await api.post(
-        "/api/tickets/pdf",
-        {
-          id: orderNumberDisplay,
-          customerName: safeCustomer,
-          vehicle: car,
-          phone,
-          govNumber,
-          vinNumber,
-          mileage: mileage ? Number(mileage) : null,
-          status: "PAYED",
-          date: orderDate || todayString,
-          services,
-          parts,
-          service: safeReason,
-          totalCents,
-          totalWithoutDiscountCents: subtotalCents,
-          discountCents,
-          discountPercent: Number(discountPercent) || 0,
-          notes: "",
-        },
-        { responseType: "blob" },
-      );
-      const blob = res.data as Blob;
-      const url = window.URL.createObjectURL(blob);
-      setInvoiceUrl(url);
-    } catch (err) {
-      console.error(err);
-      const msg =
-        (err as any)?.response?.data?.error ||
-        (err as any)?.message ||
-        "Не удалось сформировать счет-фактуру. Попробуйте ещё раз.";
-      setInvoiceError(msg);
-    } finally {
-      setInvoiceLoading(false);
-    }
-  };
-
-  const buildTicketLink = (fileName: string) => {
-    const path = `/api/tickets/file/${encodeURIComponent(fileName)}`;
-    const base = api.defaults.baseURL || window.location.origin;
-    try {
-      return new URL(path, base).toString();
-    } catch {
-      return path;
-    }
-  };
-
   const openInvoiceModal = () => {
     setShowInvoiceModal(true);
     setInvoiceError(null);
-    if (!invoiceUrl && !invoiceLoading) {
-      generateInvoice();
-    }
   };
 
   const openInvoicePdf = async () => {
-    const fileName = `ticket-${orderNumberDisplay}.pdf`;
-    const link = buildTicketLink(fileName);
-    if (invoiceUrl) {
-      window.open(invoiceUrl, "_blank", "noopener,noreferrer");
-      return;
-    }
-    try {
-      await api.head(`/api/tickets/file/${encodeURIComponent(fileName)}`);
+    const link = toAbsoluteUrl(ticketPdfUrl ?? ticketPdfPath ?? invoiceUrl ?? null);
+    if (link) {
       window.open(link, "_blank", "noopener,noreferrer");
       return;
-    } catch {
-      openInvoiceModal();
     }
+    openInvoiceModal();
   };
 
   return (
     <div className="relative mx-auto flex flex-col gap-3 p-3 max-[960px]:pt-16">
       {(loading || saving || pdfLoading) && <Loader />}
+      {loadError && (
+        <div className="rounded-lg border border-[#f2b8b5] bg-[#fff4f3] px-3 py-2 text-sm font-semibold text-[#8a1f1f]">
+          {loadError}
+        </div>
+      )}
 
       <header className="flex items-center justify-between gap-3 rounded-xl border border-[#e5e5e5] bg-white px-4 py-3 shadow-sm">
         <div className="space-y-1 leading-tight">
@@ -971,9 +1051,65 @@ export const WorkOrderPage = () => {
               type="text"
               value={car}
               onChange={(e) => setCar(e.target.value)}
+              onFocus={() => {
+                if (car.trim().length >= 2) setShowCarHints(true);
+              }}
+              onBlur={() => setTimeout(() => setShowCarHints(false), 120)}
               placeholder="Введите модель, марку"
             />
           </div>
+          {showCarHints && (
+            <div className="mt-1 max-h-60 overflow-y-auto rounded-md border border-[#dcdcdc] bg-white shadow-sm">
+              {!selectedCarBrand && carFilteredBrands.length > 0 &&
+                carFilteredBrands.map((brand) => (
+                  <button
+                    key={brand}
+                    type="button"
+                    className="block w-full px-2.5 py-2 text-left text-sm hover:bg-[#f5f5f5]"
+                    onMouseDown={(e) => e.preventDefault()}
+                    onClick={() => {
+                      setSelectedCarBrand(brand);
+                      setCar(`${brand} `);
+                      setShowCarHints(true);
+                    }}
+                  >
+                    {brand}
+                  </button>
+                ))}
+              {!selectedCarBrand && carFilteredBrands.length === 0 &&
+                carFilteredModels.map((model) => (
+                  <button
+                    key={model}
+                    type="button"
+                    className="block w-full px-2.5 py-2 text-left text-sm hover:bg-[#f5f5f5]"
+                    onMouseDown={(e) => e.preventDefault()}
+                    onClick={() => {
+                      setCar(model);
+                      setSelectedCarBrand(null);
+                      setShowCarHints(false);
+                    }}
+                  >
+                    {model}
+                  </button>
+                ))}
+              {selectedCarBrand &&
+                carFilteredModels.map((model) => (
+                  <button
+                    key={model}
+                    type="button"
+                    className="block w/full px-2.5 py-2 text-left text-sm hover:bg-[#f5f5f5]"
+                    onMouseDown={(e) => e.preventDefault()}
+                    onClick={() => {
+                      setCar(model);
+                      setSelectedCarBrand(null);
+                      setShowCarHints(false);
+                    }}
+                  >
+                    {model}
+                  </button>
+                ))}
+            </div>
+          )}
         </div>
 
         <div className="field flex flex-col gap-1">
@@ -1412,26 +1548,48 @@ export const WorkOrderPage = () => {
               </div>
             </div>
 
-            {status === "PAYED" ? (
-              <button
-                className="rounded-md w-full mt-4 border px-4 py-2 text-[14px] font-semibold shadow-sm border-[#1f8f3a] bg-[#1fad4c] text-white hover:bg-[#179340]"
-                onClick={() => openInvoicePdf()}
-              >
-                Счет-фактура
-              </button>
-            ) : (
-              <button
-                disabled={status === "NEW"}
-                className={`rounded-md w-full mt-4 border px-4 py-2 text-[14px] font-semibold shadow-sm ${
-                  status === "NEW"
-                    ? "cursor-not-allowed border-[#d6d6d6] bg-[#f0f0f0] text-[#888888]"
-                    : "border-[#e2b007] bg-[#ffd54f] text-[#1f1f1f] hover:bg-[#ffc930]"
-                }`}
-                onClick={() => setShowPaymentsModal(true)}
-              >
-                Принять оплату
-              </button>
-            )}
+            <div className="mt-4 flex flex-col gap-2">
+              {status !== "PAYED" ? (
+                <button
+                  disabled={status === "NEW"}
+                  className={`rounded-md w-full border px-4 py-2 text-[14px] font-semibold shadow-sm ${
+                    status === "NEW"
+                      ? "cursor-not-allowed border-[#d6d6d6] bg-[#f0f0f0] text-[#888888]"
+                      : "border-[#e2b007] bg-[#ffd54f] text-[#1f1f1f] hover:bg-[#ffc930]"
+                  }`}
+                  onClick={() => setShowPaymentsModal(true)}
+                >
+                  Принять оплату
+                </button>
+              ) : (
+                <button
+                  className="rounded-md w-full border border-[#4a6aff] bg-[#e8edff] px-4 py-2 text-[14px] font-semibold text-[#1c2a80] shadow-sm hover:bg-[#dbe4ff]"
+                  onClick={async () => {
+                    setStatus("PAYED");
+                    setShowInvoiceModal(true);
+                    try {
+                      setPdfLoading(true);
+                      const resolved = await ensureSavedOrder("PAYED", payments);
+                      await generatePdfAndUpload(resolved);
+                    } catch {
+                      // fall back to local download if upload fails
+                      try {
+                        const { order, id } = await ensureSavedOrder("PAYED", payments);
+                        const blob = await generateTicketPdfBlob(mapOrderToTicket(order, new Date().toISOString()));
+                        downloadBlob(blob, `ticket-${id}.pdf`);
+                      } catch (err) {
+                        console.error(err);
+                        alert("Не удалось сформировать PDF");
+                      }
+                    } finally {
+                      setPdfLoading(false);
+                    }
+                  }}
+                >
+                  Сохранить
+                </button>
+              )}
+            </div>
           </div>
         </div>
       </section>
@@ -1485,42 +1643,88 @@ export const WorkOrderPage = () => {
               </button>
             </div>
 
-            <div className="mt-4 rounded-lg border border-[#e5e5e5] bg-[#fafafa] p-3">
-              <p className="text-sm text-[#444444]">
-                Заказ успешно <span className="font-semibold text-[#1f1f1f]">Оплачен</span>!
-              </p>
+<div className="mt-4 rounded-md border border-[#d9d9d9] bg-white shadow-sm">
+  {/* Верхняя статус-плашка (как на терминале) */}
+  <div className="flex items-center justify-between border-b border-[#e9e9e9] px-4 py-3">
+    <div className="flex items-center gap-3">
+      <div className="h-3 w-3 rounded-full bg-[#1fad4c]" />
+      <div className="flex flex-col leading-tight">
+        <span className="text-[11px] uppercase tracking-wider text-[#666666]">
+          Операция
+        </span>
+        <span className="text-sm font-semibold text-[#1f1f1f]">
+          Оплата прошла успешно
+        </span>
+      </div>
+    </div>
 
-              <div className="mt-3 flex items-center gap-3">
-                {invoiceLoading ? (
-                  <>
-                  <p className="mt-1 text-sm text-[#444444]">Готовим счет-фактуру:</p>
-                    <div className="h-5 w-5 animate-spin rounded-full border-2 border-[#ffc930] border-t-transparent" />
-                    <span className="text-sm font-semibold text-[#1f1f1f]">Готовим PDF...</span>
-                  </>
-                ) : invoiceError ? (
-                  <div className="flex flex-col gap-2">
-                    <span className="text-sm text-[#a33030]">{invoiceError}</span>
-                    <div className="flex gap-2">
-                      <button
-                        className="rounded-md cursor-pointer border border-[#e2b007] bg-[#ffd54f] px-3 py-2 text-sm font-semibold text-[#1f1f1f] shadow-sm hover:bg-[#ffc930]"
-                        onClick={generateInvoice}
-                      >
-                        Повторить
-                      </button>
-                    </div>
-                  </div>
-                ) : invoiceUrl ? (
-                  <div className="flex items-center gap-3">
-                    <button
-                      className="rounded-md border border-[#1f8f3a] bg-[#1fad4c] px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-[#179340]"
-                      onClick={() => openInvoicePdf()}
-                    >
-                      Получить счет-фактуру
-                    </button>
-                  </div>
-                ) : null}
-              </div>
-            </div>
+    <span className="rounded-sm bg-[#e9f7ee] px-2 py-1 text-[11px] font-bold uppercase tracking-wider text-[#1f8f3a]">
+      ОДОБРЕНО
+    </span>
+  </div>
+
+  <div className="mt-3 rounded-sm border border-[#ededed] bg-[#fcfcfc] p-3">
+
+    <div className="my-2 border-t border-dashed border-[#dcdcdc]" />
+
+    {invoiceLoading ? (
+      <div className="flex items-start gap-3">
+        <div className="mt-0.5 h-5 w-5 animate-spin rounded-full border-2 border-[#9e9e9e] border-t-transparent" />
+        <div className="flex flex-col gap-1">
+          <span className="text-[12px] font-bold text-[#222222]">
+            ПЕЧАТЬ ДОКУМЕНТА...
+          </span>
+          <span className="text-[11px] text-[#666666]">
+            Готовим счет-фактуру и PDF
+          </span>
+        </div>
+      </div>
+    ) : invoiceError ? (
+      <div className="flex flex-col gap-2">
+        <div className="rounded-sm border border-[#f2b5b5] bg-[#fff3f3] px-2 py-2 text-[12px] text-[#a33030]">
+          {invoiceError}
+        </div>
+
+        <div className="flex flex-wrap gap-2">
+          <button
+            className="rounded-sm cursor-pointer border border-[#b9b9b9] bg-white px-3 py-2 text-[12px] font-bold text-[#1f1f1f] shadow-sm hover:bg-[#f6f6f6]"
+            onClick={() => generatePdfAndUpload().catch(() => undefined)}
+          >
+            ПОВТОРИТЬ
+          </button>
+
+          {invoiceUrl ? (
+            <a
+              className="rounded-sm border border-[#b9b9b9] bg-white px-3 py-2 text-[12px] font-bold text-[#1f1f1f] shadow-sm hover:bg-[#f6f6f6]"
+              href={
+                toAbsoluteUrl(invoiceUrl ?? ticketPdfUrl ?? ticketPdfPath ?? null) ??
+                invoiceUrl ??
+                undefined
+              }
+              download={`ticket-${orderNumberDisplay}.pdf`}
+              target="_blank"
+              rel="noreferrer"
+            >
+              СКАЧАТЬ PDF
+            </a>
+          ) : null}
+        </div>
+      </div>
+    ) : ticketPdfUrl || ticketPdfPath || invoiceUrl ? (
+      <div className="flex items-center justify-between w-full">
+        <button
+          className="border border-[#1f8f3a] bg-[#1fad4c] rounded-md px-4 py-2 text-[12px] font-bold tracking-wider text-white shadow-sm hover:bg-[#179340]"
+          onClick={() => openInvoicePdf()}
+        >
+          Открыть Акт
+        </button>
+      </div>
+    ) : null}
+
+    <div className="mt-3 border-t border-dashed border-[#dcdcdc]" />
+
+  </div>
+</div>
           </div>
         </div>
       )}

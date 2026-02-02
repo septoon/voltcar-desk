@@ -21,6 +21,8 @@ type Order = {
   payments: Payment[];
   discountPercent: number | null;
   discountAmount: number | null;
+  pdfUrl: string | null;
+  pdfPath: string | null;
 };
 
 const dataDir = path.join(process.cwd(), "data");
@@ -56,7 +58,12 @@ const readOrders = async (): Promise<Order[]> => {
   await ensureData();
   const raw = await fs.readFile(ordersPath, "utf-8");
   const parsed = JSON.parse(raw) as Order[];
-  return parsed.map((o) => ({ ...o, status: deriveStatus(o) }));
+  return parsed.map((o) => ({
+    ...o,
+    status: deriveStatus(o),
+    pdfUrl: (o as any).pdfUrl ?? null,
+    pdfPath: (o as any).pdfPath ?? null,
+  }));
 };
 
 const writeOrders = async (orders: Order[]) => {
@@ -106,6 +113,8 @@ ordersRouter.post("/", async (req, res) => {
     payments: payload.payments ?? [],
     discountPercent: payload.discountPercent ?? null,
     discountAmount: payload.discountAmount ?? null,
+    pdfUrl: payload.pdfUrl ?? null,
+    pdfPath: (payload as any).pdfPath ?? null,
   };
   order.status = deriveStatus(order);
   orders.push(order);
@@ -139,6 +148,8 @@ ordersRouter.put("/:id", async (req, res) => {
     payments: payload.payments ?? current.payments,
     discountPercent: payload.discountPercent ?? current.discountPercent ?? null,
     discountAmount: payload.discountAmount ?? current.discountAmount ?? null,
+    pdfUrl: payload.pdfUrl ?? current.pdfUrl ?? null,
+    pdfPath: (payload as any).pdfPath ?? current.pdfPath ?? null,
   };
   updated.status = deriveStatus(updated);
   orders[idx] = updated;

@@ -47,6 +47,19 @@ const formatDateInput = (date: Date) => {
   return `${year}-${month}-${day}`;
 };
 
+const DonutLegend = ({ data }: { data: { name: string; color: string | number; value: number }[] }) => (
+  <div className="grid w-[30%] max-[960px]:w-full max-h-36 grid-cols-1 gap-2 overflow-y-auto px-3 max-[960px]:mb-4 text-xs text-[#404040] sm:grid-cols-2">
+    {data.map((item) => (
+      <div key={item.name} className="flex items-center gap-2">
+        <span className="h-3 w-3 shrink-0 rounded-full" style={{ backgroundColor: String(item.color) }} />
+        <span className="truncate" title={item.name}>
+          {item.name}
+        </span>
+      </div>
+    ))}
+  </div>
+);
+
 export const RevenuePage = () => {
   const [orders, setOrders] = useState<OrderPayload[]>([]);
   const [from, setFrom] = useState(() => formatDateInput(new Date(new Date().getFullYear(), new Date().getMonth(), 1)));
@@ -199,69 +212,76 @@ export const RevenuePage = () => {
       {loading && <Loader />}
       {error && <div className="border border-[#d20000] bg-[#ffecec] px-3 py-2 text-sm">{error}</div>}
 
-      <div className="grid gap-2 rounded-xl border border-[#e5e5e5] bg-white p-4 shadow-sm lg:grid-cols-[2fr_1fr]">
-        <div className="h-80 w-full">
-          <ResponsiveContainer width="100%" height="100%">
-            <ComposedChart data={monthlyChartData}>
-              <CartesianGrid stroke="#e5e5e5" strokeDasharray="3 3" />
-              <XAxis dataKey="label" />
-              <YAxis />
-              <Tooltip />
-              <Legend />
-              <Bar dataKey="revenue" name="Выручка" barSize={28} fill="#4e79a7" />
-              <Line type="monotone" dataKey="services" name="Работы" stroke="#f28e2b" strokeWidth={2} dot={{ r: 3 }} />
-              <Line type="monotone" dataKey="parts" name="Запчасти" stroke="#76b7b2" strokeWidth={2} dot={{ r: 3 }} />
-            </ComposedChart>
-          </ResponsiveContainer>
-        </div>
+      <div className="grid gap-2 rounded-xl border border-[#e5e5e5] bg-white p-4 shadow-sm">
+        <div className="w-full flex justify-between max-[960px]:flex-col">
+          <div className="h-80 w-[70%] max-[960px]:w-full">
+            <ResponsiveContainer width="100%" height="100%">
+              <ComposedChart data={monthlyChartData}>
+                <CartesianGrid stroke="#e5e5e5" strokeDasharray="3 3" />
+                <XAxis dataKey="label" />
+                <YAxis />
+                <Tooltip />
+                <Legend />
+                <Bar dataKey="revenue" name="Выручка" barSize={28} fill="#4e79a7" />
+                <Line type="monotone" dataKey="services" name="Работы" stroke="#f28e2b" strokeWidth={2} dot={{ r: 3 }} />
+                <Line type="monotone" dataKey="parts" name="Запчасти" stroke="#76b7b2" strokeWidth={2} dot={{ r: 3 }} />
+              </ComposedChart>
+            </ResponsiveContainer>
+          </div>
 
-        <div className="flex h-80 flex-col items-center justify-center">
-          <h4 className="mb-2 text-sm font-semibold text-[#1f1f1f]">Распределение услуг</h4>
-          <ResponsiveContainer width="100%" height="100%">
-            <PieChart>
-              <Pie
-                data={donutData}
-                dataKey="value"
-                nameKey="name"
-                cx="50%"
-                cy="50%"
-                innerRadius={50}
-                outerRadius={80}
-                paddingAngle={2}
-              >
-                {donutData.map((entry, index) => (
-                  <Cell key={`cell-${index}`} fill={entry.color as string} />
-                ))}
-              </Pie>
-              <Tooltip formatter={(val: any, name) => [`${Number(val).toLocaleString("ru-RU")}`, name]} />
-              <Legend />
-            </PieChart>
-          </ResponsiveContainer>
+          <div className="flex w-[30%] max-[960px]:w-full h-80 min-h-0 flex-col items-center justify-center overflow-hidden">
+            <h4 className="mb-2 text-sm font-semibold text-[#1f1f1f]">Распределение услуг</h4>
+            <div className="flex w-full flex-1 min-h-0 justify-center items-center">
+              <ResponsiveContainer width="100%" height="100%">
+                <PieChart margin={{ top: 8, right: 8, bottom: 8, left: 8 }}>
+                  <Pie
+                    data={donutData}
+                    dataKey="value"
+                    nameKey="name"
+                    cx="50%"
+                    cy="50%"
+                    innerRadius={50}
+                    outerRadius={80}
+                    paddingAngle={2}
+                  >
+                    {donutData.map((entry, index) => (
+                      <Cell key={`cell-${index}`} fill={entry.color as string} />
+                    ))}
+                  </Pie>
+                  <Tooltip formatter={(val: any, name) => [`${Number(val).toLocaleString("ru-RU")}`, name]} />
+                </PieChart>
+              </ResponsiveContainer>
+            </div>
+            
 
+          </div>
         </div>
-        <div className="flex flex-col gap-2 w-full rounded-xl border border-[#e5e5e5] bg-white p-4 text-sm text-[#404040] shadow-sm">
-          <div className="flex items-center justify-between max-[960px]:w-full">
-            <span className="text-[#555555]">Количество заказов:</span>
-            <span className="text-[15px] font-semibold text-[#4e79a7]">{stats.count}</span>
+        <div className="flex w-full justify-between max-[960px]:flex-col-reverse">
+          <div className="w-[70%] max-[960px]:w-full flex flex-col gap-2 rounded-xl border border-[#e5e5e5] bg-white p-4 text-sm text-[#404040] shadow-sm">
+            <div className="flex items-center justify-between max-[960px]:w-full">
+              <span className="text-[#555555]">Количество заказов:</span>
+              <span className="text-[15px] font-semibold text-[#4e79a7]">{stats.count}</span>
+            </div>
+            <div className="flex items-center justify-between max-[960px]:w-full">
+              <span className="text-[#555555]">Наличные:</span>
+              <span className="text-[15px] font-semibold text-[#1f1f1f]">
+                {paymentTotals.cash.toLocaleString("ru-RU", { minimumFractionDigits: 2 })} ₽
+              </span>
+            </div>
+            <div className="flex items-center justify-between max-[960px]:w-full">
+              <span className="text-[#555555]">Перевод:</span>
+              <span className="text-[15px] font-semibold text-[#1f1f1f]">
+                {paymentTotals.card.toLocaleString("ru-RU", { minimumFractionDigits: 2 })} ₽
+              </span>
+            </div>
+            <div className="mt-1 flex items-center justify-between border-t border-[#ededed] pt-2 max-[960px]:w-full">
+              <span className="text-[#555555]">Итоговая сумма:</span>
+              <span className="text-[16px] font-bold text-[#4e79a7]">
+                {stats.total.toLocaleString("ru-RU", { minimumFractionDigits: 2 })} <span className="text-[#4e79a7]">₽</span>
+              </span>
+            </div>
           </div>
-          <div className="flex items-center justify-between max-[960px]:w-full">
-            <span className="text-[#555555]">Наличные:</span>
-            <span className="text-[15px] font-semibold text-[#1f1f1f]">
-              {paymentTotals.cash.toLocaleString("ru-RU", { minimumFractionDigits: 2 })} ₽
-            </span>
-          </div>
-          <div className="flex items-center justify-between max-[960px]:w-full">
-            <span className="text-[#555555]">Перевод:</span>
-            <span className="text-[15px] font-semibold text-[#1f1f1f]">
-              {paymentTotals.card.toLocaleString("ru-RU", { minimumFractionDigits: 2 })} ₽
-            </span>
-          </div>
-          <div className="mt-1 flex items-center justify-between border-t border-[#ededed] pt-2 max-[960px]:w-full">
-            <span className="text-[#555555]">Итоговая сумма:</span>
-            <span className="text-[16px] font-bold text-[#4e79a7]">
-              {stats.total.toLocaleString("ru-RU", { minimumFractionDigits: 2 })} <span className="text-[#4e79a7]">₽</span>
-            </span>
-          </div>
+          <DonutLegend data={donutData} />
         </div>
       </div>
     </div>

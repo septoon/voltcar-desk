@@ -5,21 +5,32 @@ npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 .env
-.env.local
+.env.*
+
+# Явно игнорируем env в подпроектах
+client/.env
+client/.env.*
+server/.env
+server/.env.*
+
+# Разрешаем шаблоны env
+!.env.example
+!client/.env.example
+!server/.env.example
 
 # Клиент
 client/node_modules
 client/build
-client/.env.local
 client/.DS_Store
+client/coverage
 
 # Сервер
 server/node_modules
 server/dist
 server/data/dev.db
 server/data/uploads
-server/.env.local
 server/.DS_Store
+server/logs
 
 # Prisma/tsc
 server/prisma/*.db

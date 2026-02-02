@@ -3,6 +3,7 @@ import dayGridPlugin from "@fullcalendar/daygrid";
 import interactionPlugin from "@fullcalendar/interaction";
 import ruLocale from "@fullcalendar/core/locales/ru";
 import { useEffect, useRef, useState } from "react";
+import axios from "axios";
 import { createAppointment, deleteAppointment, fetchAppointments, updateAppointment } from "../api/appointments";
 import { fetchServices } from "../api/services";
 import { Appointment, AppointmentPayload, AppointmentStatus } from "../types/appointment";
@@ -62,6 +63,8 @@ const defaultServices = [
 
 export const HomePage = () => {
   const navigate = useNavigate();
+  const hasReloadedRef = useRef(false);
+  const RELOAD_KEY = "home-page-reloaded-once";
   const [appointments, setAppointments] = useState<Appointment[]>([]);
   const [view, setView] = useState<"dayGridMonth">("dayGridMonth");
   const [range, setRange] = useState<{ start?: string; end?: string }>({});
@@ -73,21 +76,35 @@ export const HomePage = () => {
   const [serviceHints, setServiceHints] = useState<string[]>(defaultServices);
   const [filteredHints, setFilteredHints] = useState<string[]>([]);
   const [showHints, setShowHints] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   const [monthLabel, setMonthLabel] = useState("");
 
   const load = async (nextRange = range, nextFilters = filters) => {
-    if (!nextRange.start || !nextRange.end) return;
+    if (!nextRange.start || !nextRange.end) {
+      setLoading(false);
+      return;
+    }
     setLoading(true);
+    setLoadError(null);
+    const controller = new AbortController();
+    const timeoutId = window.setTimeout(() => controller.abort(), 6000);
     try {
       const data = await fetchAppointments({
         from: nextRange.start,
         to: nextRange.end,
         masterId: nextFilters.masterId,
         statuses: nextFilters.statuses.length ? nextFilters.statuses : undefined,
-      });
+      }, { signal: controller.signal });
       setAppointments(data);
+    } catch (err) {
+      if (axios.isCancel(err)) {
+        setLoadError("Не удалось загрузить записи (таймаут)");
+      } else {
+        setLoadError("Не удалось загрузить записи");
+      }
     } finally {
+      window.clearTimeout(timeoutId);
       setLoading(false);
     }
   };
@@ -96,6 +113,21 @@ export const HomePage = () => {
     load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [range, filters]);
+
+  // Одноразовая авто-перезагрузка через 1 сек при самом первом заходе в приложение (за сессию)
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    if (hasReloadedRef.current) return;
+    if (sessionStorage.getItem(RELOAD_KEY) === "true") return;
+
+    hasReloadedRef.current = true;
+    sessionStorage.setItem(RELOAD_KEY, "true");
+
+    const timer = window.setTimeout(() => {
+      window.location.reload();
+    }, 1000);
+    return () => window.clearTimeout(timer);
+  }, []);
 
   useEffect(() => {
     (async () => {
@@ -174,7 +206,8 @@ export const HomePage = () => {
 
   return (
     <div className="relative mx-auto flex max-w-full flex-col gap-3 p-4 max-[960px]:pt-16 bg-[#f6f7fb]">
-      {loading ? <Loader /> : null}
+      {/* Убираем полноэкранный лоадер при старте, оставляем только текстовую плашку ниже */}
+      {loadError && <div className="rounded-md border border-[#f3b8b8] bg-[#fff1f1] px-3 py-2 text-sm text-[#8a1f1f]">{loadError}</div>}
       <header className="flex items-center justify-between rounded-2xl bg-white px-4 py-3 shadow-sm">
         <div className="flex items-center gap-3">
           <h1 className="text-2xl font-bold text-[#1f1f1f]">Записать клиента</h1>

@@ -27,8 +27,7 @@
     "helmet": "^8.1.0",
     "jsonwebtoken": "^9.0.2",
     "morgan": "^1.10.1",
-    "number-to-words-ru": "^2.4.1",
-    "puppeteer": "^24.34.0"
+    "multer": "^2.0.2"
   },
   "devDependencies": {
     "@types/cors": "^2.8.19",
@@ -36,6 +35,7 @@
     "@types/helmet": "^0.0.48",
     "@types/jsonwebtoken": "^9.0.6",
     "@types/morgan": "^1.9.10",
+    "@types/multer": "^2.0.0",
     "@types/node": "^25.0.3",
     "nodemon": "^3.1.11",
     "prisma": "^7.2.0",

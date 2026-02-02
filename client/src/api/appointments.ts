@@ -17,9 +17,9 @@ const buildQuery = (params: AppointmentQuery) => {
   return search.toString();
 };
 
-export const fetchAppointments = async (params: AppointmentQuery): Promise<Appointment[]> => {
+export const fetchAppointments = async (params: AppointmentQuery, options?: { signal?: AbortSignal }): Promise<Appointment[]> => {
   const qs = buildQuery(params);
-  const res = await api.get(`/api/appointments${qs ? `?${qs}` : ""}`);
+  const res = await api.get(`/api/appointments${qs ? `?${qs}` : ""}`, { signal: options?.signal });
   return res.data;
 };
 

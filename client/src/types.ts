@@ -30,4 +30,6 @@ export type OrderPayload = {
   phone?: string | null;
   discountPercent?: number | null;
   discountAmount?: number | null;
+  pdfUrl?: string | null;
+  pdfPath?: string | null;
 };
