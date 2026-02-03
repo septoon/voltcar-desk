@@ -146,6 +146,13 @@ export const WorkOrderPage = () => {
   const lastSavedRef = useRef<string>("");
   const [viewportWidth, setViewportWidth] = useState<number>(typeof window !== "undefined" ? window.innerWidth : 1024);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [initialized, setInitialized] = useState(false);
+  // Флаг, что форма уже гидратирована (драфт/сервер) и можно писать в localStorage.
+  // Без него StrictMode в dev перезаписывает существующий черновик пустыми значениями при первом проходе эффектов.
+  const [readyToPersist, setReadyToPersist] = useState(false);
+  const [statusMenuOpen, setStatusMenuOpen] = useState(false);
+  const statusButtonRef = useRef<HTMLButtonElement | null>(null);
+  const statusMenuRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     const onResize = () => setViewportWidth(window.innerWidth);
@@ -158,6 +165,25 @@ export const WorkOrderPage = () => {
       if (invoiceUrl?.startsWith("blob:")) URL.revokeObjectURL(invoiceUrl);
     };
   }, [invoiceUrl]);
+
+  useEffect(() => {
+    if (!statusMenuOpen) return;
+    const handleClick = (event: MouseEvent) => {
+      const target = event.target as Node;
+      if (statusButtonRef.current?.contains(target)) return;
+      if (statusMenuRef.current?.contains(target)) return;
+      setStatusMenuOpen(false);
+    };
+    const handleEsc = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setStatusMenuOpen(false);
+    };
+    window.addEventListener("mousedown", handleClick);
+    window.addEventListener("keydown", handleEsc);
+    return () => {
+      window.removeEventListener("mousedown", handleClick);
+      window.removeEventListener("keydown", handleEsc);
+    };
+  }, [statusMenuOpen]);
 
   const servicesTotal = useMemo(() => sumLineItems(services), [services]);
   const partsTotal = useMemo(() => sumLineItems(parts), [parts]);
@@ -307,7 +333,12 @@ export const WorkOrderPage = () => {
   useEffect(() => {
     setSelectedRow(null);
     setContextMenu({ visible: false });
-    resetForm();
+    setReadyToPersist(false);
+    if (!orderNumber || orderNumber === "new") {
+      resetForm();
+      setInitialized(true);
+      setReadyToPersist(true);
+    }
 
     type DraftOrder = OrderPayload & { discountPercent?: string; discountAmount?: string };
     let draft: DraftOrder | null = null;
@@ -318,9 +349,15 @@ export const WorkOrderPage = () => {
       console.error("Failed to parse draft", err);
     }
 
+    // новые заказы не подхватываем из локального черновика (сервер создаёт номер)
     if (!orderNumber || orderNumber === "new") {
-      // новые заказы не подхватываем из локального черновика
       return;
+    }
+
+    // сразу показываем локальный черновик, если он есть (чтобы не видеть пустую форму до загрузки сервера)
+    if (draft && hasDraftContent(draft)) {
+      setFromOrder(draft as OrderPayload);
+      lastSavedRef.current = serializeOrder(draft as OrderPayload);
     }
 
     const controller = new AbortController();
@@ -330,13 +367,16 @@ export const WorkOrderPage = () => {
         setLoading(true);
         setLoadError(null);
         const data = await fetchOrder(orderNumber, { signal: controller.signal });
-        if (draft && hasDraftContent(draft)) {
+        // Черновик применяем только если заказ не новый и в черновике есть данные
+        if (draft && hasDraftContent(draft) && orderNumber !== "new") {
           const combined: OrderPayload = {
             ...data,
             ...(draft as OrderPayload),
             services: (draft as OrderPayload).services ?? data.services,
             parts: (draft as OrderPayload).parts ?? data.parts,
             payments: (draft as OrderPayload).payments ?? data.payments,
+            status: (draft as any).status ?? data.status,
+            date: (draft as any).date ?? data.date,
           };
           setFromOrder(combined);
           lastSavedRef.current = serializeOrder(combined);
@@ -344,6 +384,8 @@ export const WorkOrderPage = () => {
           setFromOrder(data);
           lastSavedRef.current = serializeOrder(data);
         }
+        setInitialized(true);
+        setReadyToPersist(true);
       } catch (err) {
         if ((err as any)?.name === "CanceledError" || (err as any)?.code === "ERR_CANCELED") {
           // таймаут или отмена — просто выходим без алерта, оставляем черновик
@@ -351,12 +393,34 @@ export const WorkOrderPage = () => {
         }
         console.error(err);
         setLoadError("Не удалось загрузить заказ. Проверьте соединение и обновите страницу.");
-        if (draft && hasDraftContent(draft)) {
-          setFromOrder(draft as OrderPayload);
-          lastSavedRef.current = serializeOrder(draft as OrderPayload);
+        if (draft && hasDraftContent(draft) && orderNumber !== "new") {
+          const fallback = {
+            ...(draft as OrderPayload),
+            status: (draft as any).status ?? status,
+            date: (draft as any).date ?? orderDate,
+          };
+          setFromOrder(fallback as OrderPayload);
+          lastSavedRef.current = serializeOrder(fallback as OrderPayload);
         } else {
-          resetForm();
+          setFromOrder({
+            company,
+            customer,
+            phone,
+            car,
+            govNumber,
+            vinNumber,
+            mileage: mileage ? Number(mileage) : null,
+            reason,
+            status,
+            services,
+            parts,
+            payments,
+            date: orderDate || todayString,
+          } as OrderPayload);
+          lastSavedRef.current = "";
         }
+        setInitialized(true);
+        setReadyToPersist(true);
       } finally {
         window.clearTimeout(timeoutId);
         setLoading(false);
@@ -368,6 +432,7 @@ export const WorkOrderPage = () => {
   }, [orderNumber, todayString, draftKey]);
 
   useEffect(() => {
+    if (!readyToPersist) return;
     const draft: OrderPayload = {
       date: orderDate || undefined,
       company,
@@ -413,6 +478,7 @@ export const WorkOrderPage = () => {
     discountPercent,
     discountAmount,
     company,
+    readyToPersist,
   ]);
 
   useEffect(() => {
@@ -468,6 +534,12 @@ export const WorkOrderPage = () => {
       setFilteredHints(source.slice(0, 8));
     }
   }, [showHintsFor, serviceHints]);
+
+  useEffect(() => {
+    if (status !== "PAYED" && statusMenuOpen) {
+      setStatusMenuOpen(false);
+    }
+  }, [status, statusMenuOpen]);
 
   const normalizeCar = (value: string) =>
     value
@@ -543,16 +615,18 @@ export const WorkOrderPage = () => {
   const computeStatusForSave = (): WorkStatus => {
     if (status === "PENDING_PAYMENT") return "PENDING_PAYMENT";
     if (status === "PAYED") return "PAYED";
+    if (status === "IN_PROGRESS") return "IN_PROGRESS";
     if (payments.length > 0) return "PAYED";
     if (hasContent()) return "IN_PROGRESS";
     return "NEW";
   };
 
   useEffect(() => {
+    if (!initialized) return;
     const next = computeStatusForSave();
     if (next !== status) setStatus(next);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [customer, phone, car, govNumber, vinNumber, mileage, reason, services, parts, payments]);
+  }, [initialized, status, customer, phone, car, govNumber, vinNumber, mileage, reason, services, parts, payments]);
 
   const handleSave = async (nextStatus?: WorkStatus, nextPayments?: Payment[]): Promise<OrderPayload | null> => {
     try {
@@ -598,6 +672,16 @@ export const WorkOrderPage = () => {
       return null;
     } finally {
       setSaving(false);
+    }
+  };
+
+  const handleStatusChange = async (next: WorkStatus) => {
+    setStatusMenuOpen(false);
+    if (next === status) return;
+    setStatus(next);
+    const saved = await handleSave(next);
+    if (saved?.status) {
+      setStatus(saved.status as WorkStatus);
     }
   };
 
@@ -1064,9 +1148,44 @@ export const WorkOrderPage = () => {
           </div>
         </div>
         {status === "PAYED" && (
-          <span className="status-pill inline-block rounded-md border border-[#0f9d58] bg-[#0f9d58] px-3 py-1 text-xs font-bold uppercase tracking-wide text-white">
-            {statusLabel}
-          </span>
+          <div className="relative">
+            <button
+              type="button"
+              ref={statusButtonRef}
+              className="status-pill inline-flex items-center gap-1 rounded-md border border-[#0f9d58] bg-[#0f9d58] px-3 py-1 text-xs font-bold uppercase tracking-wide text-white shadow-sm hover:bg-[#0c7d45]"
+              onClick={() => setStatusMenuOpen((prev) => !prev)}
+              title="Сменить статус"
+            >
+              {statusLabel}
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="m6 9 6 6 6-6" />
+              </svg>
+            </button>
+            {statusMenuOpen && (
+              <div
+                ref={statusMenuRef}
+                className="absolute right-0 z-30 mt-2 w-48 rounded-md border border-[#dcdcdc] bg-white shadow-lg"
+              >
+                <div className="px-3 py-2 text-[11px] font-semibold uppercase tracking-wide text-[#6b7280]">
+                  Сменить статус
+                </div>
+                <button
+                  type="button"
+                  className="block w-full px-3 py-2 text-left text-sm font-semibold text-[#1f2937] hover:bg-[#f5f5f5]"
+                  onClick={() => handleStatusChange("IN_PROGRESS")}
+                >
+                  В работе
+                </button>
+                <button
+                  type="button"
+                  className="block w-full px-3 py-2 text-left text-sm font-semibold text-[#1f2937] hover:bg-[#f5f5f5]"
+                  onClick={() => handleStatusChange("PENDING_PAYMENT")}
+                >
+                  Ожидание оплаты
+                </button>
+              </div>
+            )}
+          </div>
         )}
         {status === "PENDING_PAYMENT" && (
           <span className="status-pill inline-block rounded-md border border-[#8b5cf6] bg-[#8b5cf6] px-3 py-1 text-xs font-bold uppercase tracking-wide text-white">

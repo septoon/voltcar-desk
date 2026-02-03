@@ -3,7 +3,7 @@ import { Link } from "react-router-dom";
 import { deleteOrder, fetchOrders } from "../api/orders";
 import { OrderPayload, WorkStatus } from "../types";
 import { Loader } from "../components/Loader";
-import { fetchTickets, TicketInfo, ticketUrl } from "../api/tickets";
+import { deleteTicketFile, fetchTickets, TicketInfo, ticketUrl } from "../api/tickets";
 
 const sumLineItems = (items: { qty: number; price: number }[]) => items.reduce((acc, i) => acc + i.qty * i.price, 0);
 
@@ -153,6 +153,15 @@ export const OrdersHistoryPage = () => {
     try {
       setLoading(true);
       await deleteOrder(id);
+      // удаляем связанные PDF на сервере
+      const relatedTickets = tickets.filter((t) => t.name.includes(id));
+      for (const t of relatedTickets) {
+        try {
+          await deleteTicketFile(t.name, id);
+        } catch (err) {
+          console.warn("Не удалось удалить файл акта", t.name, err);
+        }
+      }
       try {
         localStorage.removeItem(`order-draft-${id}`);
       } catch {

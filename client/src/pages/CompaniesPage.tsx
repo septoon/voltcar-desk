@@ -3,7 +3,7 @@ import { Link } from "react-router-dom";
 import { fetchOrders } from "../api/orders";
 import { fetchTickets, TicketInfo, ticketUrl } from "../api/tickets";
 import { Loader } from "../components/Loader";
-import { OrderPayload, WorkStatus } from "../types";
+import { OrderPayload } from "../types";
 
 const currency = (value: number) => value.toLocaleString("ru-RU", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 const sumLineItems = (items: { qty: number; price: number }[] = []) => items.reduce((acc, i) => acc + i.qty * i.price, 0);
@@ -220,15 +220,13 @@ export const CompaniesPage = () => {
                           const orderId = o.id ? String(o.id) : "";
                           const orderTickets = tickets.filter((t) => t.name.includes(orderId));
                           const first = orderTickets[0];
-                          const url = first?.downloadUrl
-                            ? first.downloadUrl
-                            : first?.name
-                              ? ticketUrl(first.name, false)
-                              : (o as any).pdfPath
-                                ? ticketUrl((o as any).pdfPath, false)
-                                : (o as any).pdfUrl
-                                  ? ticketUrl((o as any).pdfUrl, false)
-                                  : null;
+                          const url = first?.name
+                            ? ticketUrl(first.name, false)
+                            : (o as any).pdfPath
+                              ? ticketUrl((o as any).pdfPath, false)
+                              : (o as any).pdfUrl
+                                ? ticketUrl((o as any).pdfUrl, false)
+                                : null;
                           return url ? (
                             <a
                               className="inline-flex items-center rounded-md border border-[#dcdcdc] px-2 py-1 text-[12px] font-semibold text-[#1a4c8b] hover:bg-[#f5f5f5]"
