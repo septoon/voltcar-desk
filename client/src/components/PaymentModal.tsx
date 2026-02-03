@@ -4,8 +4,8 @@ type PaymentModalProps = {
   open: boolean;
   onClose: () => void;
   orderNumber: string;
-  payMethod: "cash" | "card";
-  setPayMethod: (method: "cash" | "card") => void;
+  payMethod: "cash" | "card" | "later";
+  setPayMethod: (method: "cash" | "card" | "later") => void;
   payAmountInput: string;
   setPayAmountInput: (val: string) => void;
   parseInputNumber: (value: string) => number;
@@ -20,6 +20,7 @@ type PaymentModalProps = {
   handleInvoiceCreate: (event: React.MouseEvent<HTMLButtonElement>) => void | Promise<void>;
   ghostBtn: string;
   smallBtn: string;
+  payButtonLabel: string;
 };
 
 export const PaymentModal: React.FC<PaymentModalProps> = ({
@@ -42,6 +43,7 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
   handleInvoiceCreate,
   ghostBtn,
   smallBtn,
+  payButtonLabel,
 }) => {
   if (!open) return null;
 
@@ -112,7 +114,7 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
 
           <div className="flex w-1/2 max-[960px]:w-full flex-col justify-between gap-3">
               <div className="flex flex-col">
-                <span className="text-[13px] font-semibold text-[#555555]">Способы оплаты</span>
+                <span className="text-[13px] font-semibold mb-2 text-[#555555]">Способы оплаты</span>
                 <div className="flex flex-col gap-2">
                   <button
                     className={`w-full rounded-md border px-3 py-2 text-left text-[14px] font-semibold ${
@@ -133,6 +135,16 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
                     onClick={() => setPayMethod("card")}
                   >
                     Перевод
+                  </button>
+                  <button
+                    className={`w-full rounded-md border px-3 py-2 text-left text-[14px] font-semibold ${
+                      payMethod === "later"
+                        ? "border-[#e2b007] bg-[#ffd54f]"
+                        : "border-[#d6d6d6] bg-white hover:bg-[#f5f5f5]"
+                    }`}
+                    onClick={() => setPayMethod("later")}
+                  >
+                    Оплата позже
                   </button>
                 </div>
                 <div className="mt-3 flex flex-col gap-1 rounded-md border border-[#e5e5e5] bg-white p-2 text-sm">
@@ -168,7 +180,7 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
               className="rounded-md border self-stretch border-[#1f8f3a] bg-[#1fad4c] px-4 py-2 text-[14px] font-semibold text-white shadow-sm hover:bg-[#179340]"
               onClick={handleInvoiceCreate}
             >
-              Оплатить
+              {payButtonLabel}
             </button>
           </div>
 

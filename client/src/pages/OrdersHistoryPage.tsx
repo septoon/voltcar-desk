@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import { deleteOrder, fetchOrders } from "../api/orders";
 import { OrderPayload, WorkStatus } from "../types";
 import { Loader } from "../components/Loader";
+import { fetchTickets, TicketInfo, ticketUrl } from "../api/tickets";
 
 const sumLineItems = (items: { qty: number; price: number }[]) => items.reduce((acc, i) => acc + i.qty * i.price, 0);
 
@@ -20,12 +21,50 @@ const computeTotal = (order: OrderPayload) => {
 const statusLabels: Record<WorkStatus, string> = {
   NEW: "Новый",
   IN_PROGRESS: "В работе",
+  PENDING_PAYMENT: "Ожидание оплаты",
   PAYED: "Оплачен",
+};
+
+const hasDraftContent = (draft: Partial<OrderPayload>) =>
+  Boolean(
+    draft &&
+      ((draft as any).company?.toString().trim() ||
+        draft.customer?.toString().trim() ||
+        draft.phone?.toString().trim() ||
+        draft.car?.toString().trim() ||
+        draft.govNumber?.toString().trim() ||
+        draft.vinNumber?.toString().trim() ||
+        draft.reason?.toString().trim() ||
+        (draft.services && draft.services.length) ||
+        (draft.parts && draft.parts.length) ||
+        (draft.payments && draft.payments.length) ||
+        (draft.mileage && draft.mileage > 0)),
+  );
+
+const mergeDraft = (order: OrderPayload): OrderPayload => {
+  if (typeof window === "undefined" || !order.id) return order;
+  const key = `order-draft-${order.id}`;
+  try {
+    const raw = localStorage.getItem(key);
+    if (!raw) return order;
+    const draft = JSON.parse(raw) as Partial<OrderPayload>;
+    if (!hasDraftContent(draft)) return order;
+    return {
+      ...order,
+      ...draft,
+      services: draft.services ?? order.services ?? [],
+      parts: draft.parts ?? order.parts ?? [],
+      payments: draft.payments ?? order.payments ?? [],
+    };
+  } catch {
+    return order;
+  }
 };
 
 const normalizeStatus = (value?: string): WorkStatus => {
   if (!value) return "NEW";
   const cleaned = value.trim().toUpperCase().replace(/\s+/g, "_").replace(/-+/g, "_");
+  if (["PENDING_PAYMENT", "PENDING", "WAITING_PAYMENT", "AWAITING_PAYMENT"].includes(cleaned)) return "PENDING_PAYMENT";
   if (cleaned === "PAYED") return "PAYED";
   if (["IN_PROGRESS", "INPROGRESS", "IN_PROGRESS_", "ISSUED"].includes(cleaned)) return "IN_PROGRESS";
   return "NEW";
@@ -38,9 +77,11 @@ const getStatusLabel = (value?: string) => {
 
 export const OrdersHistoryPage = () => {
   const [orders, setOrders] = useState<OrderPayload[]>([]);
+  const [tickets, setTickets] = useState<TicketInfo[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [query, setQuery] = useState("");
+  const [advancedQuery, setAdvancedQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<WorkStatus | "">("");
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; id: string; visible: true } | { visible: false }>({
@@ -53,11 +94,15 @@ export const OrdersHistoryPage = () => {
         setLoading(true);
         setError("");
         const data = await fetchOrders();
+        const ticketFiles = await fetchTickets();
+        setTickets(ticketFiles);
         setOrders(
-          data.map((order: OrderPayload) => ({
-            ...order,
-            status: normalizeStatus(order.status),
-          })),
+          data.map((order: OrderPayload) =>
+            mergeDraft({
+              ...order,
+              status: normalizeStatus(order.status),
+            }),
+          ),
         );
       } catch (err) {
         console.error(err);
@@ -72,12 +117,15 @@ export const OrdersHistoryPage = () => {
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
     const qDigits = q.replace(/\D/g, "");
+    const adv = advancedQuery.trim().toLowerCase();
+    const advDigits = adv.replace(/\D/g, "");
     const normalize = (val?: string | null) => (val ? String(val).toLowerCase() : "");
     const digits = (val?: string | null) => (val ? String(val).replace(/\D/g, "") : "");
     return orders.filter((o) => {
       const haystack = [
         normalize(o.id),
         normalize(o.customer),
+        normalize((o as any).company),
         normalize(o.car),
         normalize(o.govNumber),
         normalize(o.vinNumber),
@@ -90,10 +138,13 @@ export const OrdersHistoryPage = () => {
       const haystackDigits = [digits(o.phone), digits(o.govNumber), digits(o.id)].filter(Boolean).join(" ");
 
       const matchQuery = q ? haystack.includes(q) || (qDigits ? haystackDigits.includes(qDigits) : false) : true;
+      const matchAdv = adv
+        ? haystack.includes(adv) || (advDigits ? haystackDigits.includes(advDigits) : false)
+        : true;
       const matchStatus = statusFilter ? normalizeStatus(o.status) === statusFilter : true;
-      return matchQuery && matchStatus;
+      return matchQuery && matchAdv && matchStatus;
     });
-  }, [orders, query, statusFilter]);
+  }, [orders, query, advancedQuery, statusFilter]);
 
   const handleDelete = async (id: string) => {
     const order = orders.find((o) => o.id === id);
@@ -142,9 +193,9 @@ export const OrdersHistoryPage = () => {
            <h2 className="text-xl font-bold mr-4 text-[#1f1f1f]">История заказов</h2>
             <input
               type="text"
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              placeholder="Поиск по номеру"
+              value={advancedQuery}
+              onChange={(e) => setAdvancedQuery(e.target.value)}
+              placeholder="Поиск клиента"
               className="w-56 max-[960px]:w-[40%] rounded-md border border-[#cfcfcf] bg-white px-3 py-2 text-sm focus:outline-none"
             />
          </div>
@@ -159,6 +210,7 @@ export const OrdersHistoryPage = () => {
               <option value="">Все</option>
               <option value="NEW">{statusLabels.NEW}</option>
               <option value="IN_PROGRESS">{statusLabels.IN_PROGRESS}</option>
+              <option value="PENDING_PAYMENT">{statusLabels.PENDING_PAYMENT}</option>
               <option value="PAYED">{statusLabels.PAYED}</option>
             </select>
           </label>
@@ -181,7 +233,7 @@ export const OrdersHistoryPage = () => {
         <table className="min-w-[720px] w-full border-collapse text-sm">
           <thead>
             <tr>
-              {["№", "Дата", "Клиент", "Авто", "Сумма, руб.", "Статус"].map((h) => (
+              {["№", "Дата", "Клиент", "Авто", "Сумма, руб.", "Акт", "Статус"].map((h) => (
                 <th key={h} className="border border-[#dcdcdc] bg-[#f5f5f5] px-3 py-2 text-left font-bold text-[#404040]">
                   {h}
                 </th>
@@ -189,12 +241,15 @@ export const OrdersHistoryPage = () => {
             </tr>
           </thead>
           <tbody>
-            {filtered.map((order) => {
+            {filtered.map((order, idx) => {
               const isSelected = selectedId === order.id;
+              const orderTickets = tickets.filter(
+                (t) => (t.ticketId && t.ticketId === order.id) || t.name.includes(order.id ?? "")
+              );
               return (
                 <tr
                   key={order.id}
-                  className={`text-sm ${isSelected ? "bg-[#fff7d6]" : ""}`}
+                  className={`text-sm ${isSelected ? "bg-[#fff7d6]" : idx % 2 === 0 ? "bg-white" : "bg-[#f8fafc]"}`}
                   onClick={() => handleRowClick(order.id!)}
                   onContextMenu={(e) => handleContextMenu(e, order.id!)}
                 >
@@ -210,9 +265,46 @@ export const OrdersHistoryPage = () => {
                     {computeTotal(order).toLocaleString("ru-RU")}
                   </td>
                   <td className="border border-[#dcdcdc] px-3 py-2">
-                    <span className="inline-block rounded-md border border-[#dcdcdc] bg-[#f7f7f7] px-2 py-1 text-[12px] font-semibold uppercase text-[#333]">
-                      {getStatusLabel(order.status)}
-                    </span>
+                    {orderTickets.length === 0 ? (
+                      <span className="text-[#999999]">—</span>
+                    ) : (
+                      <div className="flex flex-wrap gap-1">
+                        {orderTickets.map((t) => (
+                          <a
+                            key={`${order.id}-${t.name}`}
+                            className="inline-flex items-center rounded-md border border-[#dcdcdc] px-2 py-1 text-[12px] font-semibold text-[#1a4c8b] hover:bg-[#f5f5f5]"
+                            href={ticketUrl(t.name, false)}
+                            target="_blank"
+                            rel="noreferrer"
+                            onClick={(e) => e.stopPropagation()}
+                          >
+                            Открыть
+                          </a>
+                        ))}
+                      </div>
+                    )}
+                  </td>
+                  <td className="border border-[#dcdcdc] px-3 py-2">
+                    {order.status === "PAYED" && (
+                      <span className="inline-block rounded-md border border-[#0f9d58] bg-[#0f9d58] px-2 py-0 text-[12px] font-semibold uppercase text-white">
+                        {getStatusLabel(order.status)}
+                      </span>
+                    )}
+                    {order.status === "PENDING_PAYMENT" && (
+                      <span className="inline-block rounded-md border border-[#8b5cf6] bg-[#8b5cf6] px-2 py-0 text-[12px] font-semibold uppercase text-white">
+                        {getStatusLabel(order.status)}
+                      </span>
+                    )}
+                    {order.status === "IN_PROGRESS" && (
+                      <span className="inline-block rounded-md border border-[#f2994a] bg-[#f2994a] px-2 py-0 text-[12px] font-semibold uppercase text-white">
+                        {getStatusLabel(order.status)}
+                      </span>
+                    )}
+                    {order.status === "NEW" && (
+                      <span className="inline-block rounded-md border border-[#074587] bg-[#1d4ed8] px-2 py-0 text-[12px] font-semibold uppercase text-white">
+                        {getStatusLabel(order.status)}
+                      </span>
+                    )}
                   </td>
                 </tr>
               );

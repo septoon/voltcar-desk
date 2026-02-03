@@ -71,6 +71,7 @@ export const RevenuePage = () => {
   const normalizeStatus = useCallback((value?: string): WorkStatus => {
     if (!value) return "NEW";
     const cleaned = value.trim().toUpperCase().replace(/\s+/g, "_").replace(/-+/g, "_");
+    if (["PENDING_PAYMENT", "PENDING", "WAITING_PAYMENT", "AWAITING_PAYMENT"].includes(cleaned)) return "PENDING_PAYMENT";
     if (cleaned === "PAYED") return "PAYED";
     if (["IN_PROGRESS", "INPROGRESS", "IN_PROGRESS_", "ISSUED"].includes(cleaned)) return "IN_PROGRESS";
     return "NEW";
@@ -112,6 +113,20 @@ export const RevenuePage = () => {
     const total = filtered.reduce((acc, o) => acc + computeTotal(o), 0);
     return { count: filtered.length, total, filtered };
   }, [orders, from, to, status, normalizeStatus]);
+
+  const pendingTotal = useMemo(() => {
+    const start = from ? new Date(from) : null;
+    const end = to ? new Date(to) : null;
+    return orders
+      .filter((o) => normalizeStatus(o.status) === "PENDING_PAYMENT")
+      .filter((o) => {
+        const date = parseDate(o.date);
+        if (start && date && date < start) return false;
+        if (end && date && date > end) return false;
+        return true;
+      })
+      .reduce((acc, o) => acc + computeTotal(o), 0);
+  }, [orders, from, to, normalizeStatus]);
 
   const monthlyChartData = useMemo(() => {
     const monthFormatter = new Intl.DateTimeFormat("ru-RU", { month: "long", year: "numeric" });
@@ -272,6 +287,12 @@ export const RevenuePage = () => {
               <span className="text-[#555555]">Перевод:</span>
               <span className="text-[15px] font-semibold text-[#1f1f1f]">
                 {paymentTotals.card.toLocaleString("ru-RU", { minimumFractionDigits: 2 })} ₽
+              </span>
+            </div>
+            <div className="flex items-center justify-between max-[960px]:w-full">
+              <span className="text-[#555555]">Ожидание оплаты:</span>
+              <span className="text-[15px] font-semibold text-[#7c3aed]">
+                {pendingTotal.toLocaleString("ru-RU", { minimumFractionDigits: 2 })} ₽
               </span>
             </div>
             <div className="mt-1 flex items-center justify-between border-t border-[#ededed] pt-2 max-[960px]:w-full">

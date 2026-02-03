@@ -19,7 +19,7 @@ export const createOrder = async (payload: OrderPayload, config?: Config) => {
   return res.data;
 };
 
-export const updateOrder = async (id: string, payload: OrderPayload, config?: Config) => {
+export const updateOrder = async (id: string, payload: Partial<OrderPayload>, config?: Config) => {
   const res = await api.put(`/api/orders/${id}`, payload, { signal: config?.signal });
   return res.data;
 };

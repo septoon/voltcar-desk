@@ -10,6 +10,7 @@ import { Appointment, AppointmentPayload, AppointmentStatus } from "../types/app
 import { useNavigate } from "react-router-dom";
 import { Loader } from "../components/Loader";
 import { IMaskInput } from "react-imask";
+import cars from "../data/cars.json";
 
 type Draft = {
   id?: number;
@@ -76,6 +77,12 @@ export const HomePage = () => {
   const [serviceHints, setServiceHints] = useState<string[]>(defaultServices);
   const [filteredHints, setFilteredHints] = useState<string[]>([]);
   const [showHints, setShowHints] = useState(false);
+  const [carHints, setCarHints] = useState<string[]>([]);
+  const [carBrandMap, setCarBrandMap] = useState<Record<string, string[]>>({});
+  const [carFilteredBrands, setCarFilteredBrands] = useState<string[]>([]);
+  const [carFilteredModels, setCarFilteredModels] = useState<string[]>([]);
+  const [selectedCarBrand, setSelectedCarBrand] = useState<string | null>(null);
+  const [showCarHints, setShowCarHints] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
 
   const [monthLabel, setMonthLabel] = useState("");
@@ -141,7 +148,56 @@ export const HomePage = () => {
         console.error(err);
       }
     })();
+    const source = Array.isArray(cars) ? (cars as string[]) : [];
+    const uniq = Array.from(new Set(source.map((v) => v.trim()).filter(Boolean)));
+    setCarHints(uniq);
+    const brandMap: Record<string, string[]> = {};
+    uniq.forEach((full) => {
+      const [brandRaw] = full.split(/\s+/);
+      if (!brandRaw) return;
+      const brand = brandRaw.trim();
+      const models = brandMap[brand] ?? [];
+      models.push(full);
+      brandMap[brand] = models;
+    });
+    setCarBrandMap(brandMap);
   }, []);
+
+  const normalizeCar = (value: string) =>
+    value
+      .trim()
+      .toLowerCase()
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "");
+
+  useEffect(() => {
+    const carValue = draft?.vehicle ?? "";
+    const q = normalizeCar(carValue);
+
+    if (!carValue || q.length < 2) {
+      setShowCarHints(false);
+      setSelectedCarBrand(null);
+      setCarFilteredBrands([]);
+      setCarFilteredModels([]);
+      return;
+    }
+
+    if (selectedCarBrand) {
+      const models = carBrandMap[selectedCarBrand] ?? [];
+      const matches = models.filter((m) => normalizeCar(m).includes(q)).slice(0, 10);
+      setCarFilteredModels(matches);
+      setShowCarHints(matches.length > 0);
+      return;
+    }
+
+    const brands = Object.keys(carBrandMap);
+    const matchesBrands = brands.filter((b) => normalizeCar(b).includes(q)).slice(0, 10);
+    const fallbackModels = carHints.filter((name) => normalizeCar(name).includes(q)).slice(0, 10);
+
+    setCarFilteredBrands(matchesBrands);
+    setCarFilteredModels(matchesBrands.length ? [] : fallbackModels);
+    setShowCarHints(matchesBrands.length > 0 || fallbackModels.length > 0);
+  }, [draft?.vehicle, carBrandMap, selectedCarBrand, carHints]);
 
   const calendarRef = useRef<FullCalendar | null>(null);
 
@@ -385,14 +441,83 @@ export const HomePage = () => {
                     inputMode="tel"
                   />
                 </label>
-                <label className="flex flex-col gap-1">
+                <label className="relative flex flex-col gap-1">
                   Автомобиль
                   <input
+                    autoComplete="off"
+                    spellCheck={false}
                     className="rounded-md border border-[#cfcfcf] px-2 py-2"
                     value={draft.vehicle ?? ""}
-                    onChange={(e) => setDraft({ ...draft, vehicle: e.target.value })}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      setDraft({ ...draft, vehicle: val });
+                      if (!val.trim()) {
+                        setSelectedCarBrand(null);
+                      }
+                    }}
+                    onFocus={() => {
+                      const val = draft.vehicle ?? "";
+                      if (val.trim().length >= 2) setShowCarHints(true);
+                    }}
+                    onBlur={() => setTimeout(() => setShowCarHints(false), 120)}
                     placeholder="Марка, модель, год"
                   />
+                  {showCarHints && (
+                    <div className="absolute left-0 right-0 top-full z-10 mt-1 max-h-48 overflow-y-auto rounded-md border border-[#cfcfcf] bg-white shadow-sm">
+                      {!selectedCarBrand &&
+                        carFilteredBrands.length > 0 &&
+                        carFilteredBrands.map((brand) => (
+                          <button
+                            key={brand}
+                            type="button"
+                            className="block w-full px-2 py-1 text-left text-sm hover:bg-[#f5f5f5]"
+                            onMouseDown={(e) => e.preventDefault()}
+                            onClick={() => {
+                              setSelectedCarBrand(brand);
+                              setDraft({ ...draft, vehicle: `${brand} ` });
+                              setShowCarHints(true);
+                            }}
+                          >
+                            {brand}
+                          </button>
+                        ))}
+
+                      {!selectedCarBrand &&
+                        carFilteredBrands.length === 0 &&
+                        carFilteredModels.map((model) => (
+                          <button
+                            key={model}
+                            type="button"
+                            className="block w-full px-2 py-1 text-left text-sm hover:bg-[#f5f5f5]"
+                            onMouseDown={(e) => e.preventDefault()}
+                            onClick={() => {
+                              setDraft({ ...draft, vehicle: model });
+                              setSelectedCarBrand(null);
+                              setShowCarHints(false);
+                            }}
+                          >
+                            {model}
+                          </button>
+                        ))}
+
+                      {selectedCarBrand &&
+                        carFilteredModels.map((model) => (
+                          <button
+                            key={model}
+                            type="button"
+                            className="block w-full px-2 py-1 text-left text-sm hover:bg-[#f5f5f5]"
+                            onMouseDown={(e) => e.preventDefault()}
+                            onClick={() => {
+                              setDraft({ ...draft, vehicle: model });
+                              setSelectedCarBrand(null);
+                              setShowCarHints(false);
+                            }}
+                          >
+                            {model}
+                          </button>
+                        ))}
+                    </div>
+                  )}
                 </label>
               </div>
               <label className="flex flex-col gap-1 text-sm">

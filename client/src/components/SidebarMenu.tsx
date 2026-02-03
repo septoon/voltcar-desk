@@ -9,7 +9,8 @@ const items = [
   { key: "home", label: "Главная", path: "/", icon: "home" as const },
   { key: "new", label: "Новый заказ", path: "/orders/new", icon: "plus" as const },
   { key: "history", label: "История заказов", path: "/orders/history", icon: "archive" as const },
-  { key: "tickets", label: "Акты", path: "/tickets", icon: "document" as const },
+  { key: "pending", label: "Ожидание оплаты", path: "/pending-payments", icon: "clock" as const },
+  { key: "companies", label: "Компании", path: "/companies", icon: "building" as const },
   { key: "clients", label: "Найти клиента", path: "/clients/search", icon: "search" as const },
   { key: "services", label: "Услуги", path: "/services", icon: "tools" as const },
   { key: "revenue", label: "Данные по выручкам", path: "/reports/revenue", icon: "chart" as const },
@@ -103,36 +104,6 @@ const Icon = ({ name, active }: { name: IconName; active: boolean }) => {
         </svg>
       );
 
-       case "document":
-      return (
-        <svg {...common}>
-          {/* Лист */}
-          <path
-            d="M7 3h7l5 5v13a1 1 0 0 1-1 1H7a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1Z"
-            stroke={stroke}
-            strokeWidth={strokeWidth}
-            strokeLinecap={strokeLinecap}
-            strokeLinejoin={strokeLinejoin}
-          />
-          {/* Загнутый угол */}
-          <path
-            d="M14 3v5h5"
-            stroke={stroke}
-            strokeWidth={strokeWidth}
-            strokeLinecap={strokeLinecap}
-            strokeLinejoin={strokeLinejoin}
-          />
-          {/* Строки */}
-          <path
-            d="M9 13h6M9 17h6"
-            stroke={stroke}
-            strokeWidth={strokeWidth}
-            strokeLinecap={strokeLinecap}
-            strokeLinejoin={strokeLinejoin}
-          />
-        </svg>
-      );
-
     case "search":
       return (
         <svg {...common}>
@@ -187,6 +158,26 @@ const Icon = ({ name, active }: { name: IconName; active: boolean }) => {
         </svg>
       );
 
+    case "clock":
+      return (
+        <svg {...common}>
+          <path
+            d="M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18Z"
+            stroke={stroke}
+            strokeWidth={strokeWidth}
+            strokeLinecap={strokeLinecap}
+            strokeLinejoin={strokeLinejoin}
+          />
+          <path
+            d="M12 7v5l3 2"
+            stroke={stroke}
+            strokeWidth={strokeWidth}
+            strokeLinecap={strokeLinecap}
+            strokeLinejoin={strokeLinejoin}
+          />
+        </svg>
+      );
+
     case "tools":
       return (
         <svg {...common}>
@@ -213,6 +204,25 @@ const Icon = ({ name, active }: { name: IconName; active: boolean }) => {
           />
         </svg>
       );
+
+    case "building":
+      return (
+        <svg {...common}>
+          <path d="M5 20h14" stroke={stroke} strokeWidth={strokeWidth} strokeLinecap={strokeLinecap} strokeLinejoin={strokeLinejoin} />
+          <path
+            d="M7 20V7.5a1 1 0 0 1 .76-.97l4-1a1 1 0 0 1 1.24.97V20"
+            stroke={stroke}
+            strokeWidth={strokeWidth}
+            strokeLinecap={strokeLinecap}
+            strokeLinejoin={strokeLinejoin}
+          />
+          <path d="M11 9h2" stroke={stroke} strokeWidth={strokeWidth} strokeLinecap={strokeLinecap} />
+          <path d="M11 12h2" stroke={stroke} strokeWidth={strokeWidth} strokeLinecap={strokeLinecap} />
+          <path d="M11 15h2" stroke={stroke} strokeWidth={strokeWidth} strokeLinecap={strokeLinecap} />
+          <path d="M9 11h-2M9 14h-2" stroke={stroke} strokeWidth={strokeWidth} strokeLinecap={strokeLinecap} />
+          <path d="M15 20v-4h2v4" stroke={stroke} strokeWidth={strokeWidth} strokeLinecap={strokeLinecap} strokeLinejoin={strokeLinejoin} />
+        </svg>
+      );
   }
 };
 
@@ -225,7 +235,8 @@ export const SidebarMenu = ({ mobileOpen, onClose }: Props) => {
   const activeKey = (() => {
     if (location.pathname === "/") return "home";
     if (location.pathname.startsWith("/orders/history")) return "history";
-    if (location.pathname.startsWith("/tickets")) return "tickets";
+    if (location.pathname.startsWith("/pending-payments")) return "pending";
+    if (location.pathname.startsWith("/companies")) return "companies";
     if (location.pathname.startsWith("/clients")) return "clients";
     if (location.pathname.startsWith("/services")) return "services";
     if (location.pathname.startsWith("/reports/revenue")) return "revenue";

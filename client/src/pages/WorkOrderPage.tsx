@@ -47,10 +47,12 @@ type TableKind = "services" | "parts";
 const statusOptions: Array<{ value: WorkStatus; label: string }> = [
   { value: "NEW", label: "Новый" },
   { value: "IN_PROGRESS", label: "В работе" },
+   { value: "PENDING_PAYMENT", label: "Ожидание оплаты" },
   { value: "PAYED", label: "Оплачен" },
 ];
 
 const normalizeStatus = (value: any): WorkStatus => {
+  if (value === "PENDING_PAYMENT") return "PENDING_PAYMENT";
   if (value === "IN_PROGRESS") return "IN_PROGRESS";
   if (value === "PAYED") return "PAYED";
   return "NEW";
@@ -86,6 +88,7 @@ export const WorkOrderPage = () => {
   const today = new Date();
   const todayString = today.toLocaleDateString("ru-RU");
 
+  const [company, setCompany] = useState("");
   const [customer, setCustomer] = useState("");
   const [car, setCar] = useState("");
   const [mileage, setMileage] = useState<string>("");
@@ -131,7 +134,7 @@ export const WorkOrderPage = () => {
   const [discountPercent, setDiscountPercent] = useState("0");
   const [discountAmount, setDiscountAmount] = useState("0");
   const [pdfLoading, setPdfLoading] = useState(false);
-  const [payMethod, setPayMethod] = useState<"cash" | "card">("cash");
+  const [payMethod, setPayMethod] = useState<"cash" | "card" | "later">("cash");
   const [payAmountInput, setPayAmountInput] = useState<string>("0");
   const [showInvoiceModal, setShowInvoiceModal] = useState(false);
   const [ticketPdfUrl, setTicketPdfUrl] = useState<string | null>(null);
@@ -177,7 +180,8 @@ export const WorkOrderPage = () => {
 
   const hasContent = () =>
     Boolean(
-      customer.trim() ||
+      company.trim() ||
+        customer.trim() ||
         phone.trim() ||
         car.trim() ||
         govNumber.trim() ||
@@ -187,6 +191,21 @@ export const WorkOrderPage = () => {
         services.length ||
         parts.length ||
         payments.length,
+    );
+
+  const hasOrderContent = (order: Partial<OrderPayload>) =>
+    Boolean(
+      (order as any).company?.toString().trim() ||
+        order.customer?.toString().trim() ||
+        order.phone?.toString().trim() ||
+        order.car?.toString().trim() ||
+        order.govNumber?.toString().trim() ||
+        order.vinNumber?.toString().trim() ||
+        order.reason?.toString().trim() ||
+        (order.services && order.services.length) ||
+        (order.parts && order.parts.length) ||
+        (order.payments && order.payments.length) ||
+        (order.mileage && order.mileage > 0),
     );
 
   const discountValue = useMemo(() => {
@@ -222,20 +241,22 @@ export const WorkOrderPage = () => {
   const hasDraftContent = (draft: Partial<OrderPayload>) => {
     if (!draft) return false;
     return Boolean(
-      (draft.customer && draft.customer.trim()) ||
+      (draft.company && draft.company.trim()) ||
+        (draft.customer && draft.customer.trim()) ||
         (draft.phone && draft.phone.trim()) ||
         (draft.car && draft.car.trim()) ||
         (draft.govNumber && String(draft.govNumber).trim()) ||
-        (draft.vinNumber && String(draft.vinNumber).trim()) ||
-        (draft.reason && draft.reason.trim()) ||
-        (draft.services && draft.services.length) ||
-        (draft.parts && draft.parts.length) ||
-        (draft.payments && draft.payments.length) ||
-        (draft.mileage && draft.mileage > 0),
+      (draft.vinNumber && String(draft.vinNumber).trim()) ||
+      (draft.reason && draft.reason.trim()) ||
+      (draft.services && draft.services.length) ||
+      (draft.parts && draft.parts.length) ||
+      (draft.payments && draft.payments.length) ||
+      (draft.mileage && draft.mileage > 0),
     );
   };
 
   const resetForm = () => {
+    setCompany("");
     setCustomer("");
     setPhone("");
     setCar("");
@@ -259,6 +280,7 @@ export const WorkOrderPage = () => {
   };
 
   const setFromOrder = (data: OrderPayload) => {
+    setCompany((data as any).company ?? "");
     setCustomer(data.customer ?? "");
     setPhone(data.phone ?? "");
     setCar(data.car ?? "");
@@ -297,25 +319,18 @@ export const WorkOrderPage = () => {
     }
 
     if (!orderNumber || orderNumber === "new") {
-      if (draft) {
-        setFromOrder(draft);
-        lastSavedRef.current = serializeOrder(draft);
-        if (typeof (draft as any).discountPercent === "string") setDiscountPercent((draft as any).discountPercent);
-        if (typeof (draft as any).discountAmount === "string") setDiscountAmount((draft as any).discountAmount);
-        if (typeof (draft as any).phone === "string") setPhone((draft as any).phone);
-      }
+      // новые заказы не подхватываем из локального черновика
       return;
     }
 
     const controller = new AbortController();
-    const timeoutId = window.setTimeout(() => controller.abort(), 6000);
+    const timeoutId = window.setTimeout(() => controller.abort(), 8000);
     const load = async () => {
       try {
         setLoading(true);
         setLoadError(null);
         const data = await fetchOrder(orderNumber, { signal: controller.signal });
-        const useDraft = draft && hasDraftContent(draft);
-        if (useDraft) {
+        if (draft && hasDraftContent(draft)) {
           const combined: OrderPayload = {
             ...data,
             ...(draft as OrderPayload),
@@ -325,23 +340,20 @@ export const WorkOrderPage = () => {
           };
           setFromOrder(combined);
           lastSavedRef.current = serializeOrder(combined);
-          if (typeof (draft as any).discountPercent === "string") setDiscountPercent((draft as any).discountPercent);
-          if (typeof (draft as any).discountAmount === "string") setDiscountAmount((draft as any).discountAmount);
-          if (typeof (draft as any).phone === "string") setPhone((draft as any).phone);
         } else {
           setFromOrder(data);
           lastSavedRef.current = serializeOrder(data);
         }
       } catch (err) {
+        if ((err as any)?.name === "CanceledError" || (err as any)?.code === "ERR_CANCELED") {
+          // таймаут или отмена — просто выходим без алерта, оставляем черновик
+          return;
+        }
         console.error(err);
         setLoadError("Не удалось загрузить заказ. Проверьте соединение и обновите страницу.");
-        const useDraft = draft && hasDraftContent(draft);
-        if (useDraft) {
+        if (draft && hasDraftContent(draft)) {
           setFromOrder(draft as OrderPayload);
           lastSavedRef.current = serializeOrder(draft as OrderPayload);
-          if (typeof (draft as any).discountPercent === "string") setDiscountPercent((draft as any).discountPercent);
-          if (typeof (draft as any).discountAmount === "string") setDiscountAmount((draft as any).discountAmount);
-          if (typeof (draft as any).phone === "string") setPhone((draft as any).phone);
         } else {
           resetForm();
         }
@@ -358,6 +370,7 @@ export const WorkOrderPage = () => {
   useEffect(() => {
     const draft: OrderPayload = {
       date: orderDate || undefined,
+      company,
       customer,
       car,
       govNumber,
@@ -375,6 +388,7 @@ export const WorkOrderPage = () => {
         draftKey,
         JSON.stringify({
           ...draft,
+          company,
           discountPercent,
           discountAmount,
         }),
@@ -398,6 +412,7 @@ export const WorkOrderPage = () => {
     orderDate,
     discountPercent,
     discountAmount,
+    company,
   ]);
 
   useEffect(() => {
@@ -502,6 +517,7 @@ export const WorkOrderPage = () => {
   }, []);
 
   const orderPayload = (): OrderPayload => ({
+    company,
     customer,
     phone: phone,
     car,
@@ -525,6 +541,7 @@ export const WorkOrderPage = () => {
   const VIN_CHARS = "ABCDEFGHJKLMNPRSTUVWXYZ0123456789";
 
   const computeStatusForSave = (): WorkStatus => {
+    if (status === "PENDING_PAYMENT") return "PENDING_PAYMENT";
     if (status === "PAYED") return "PAYED";
     if (payments.length > 0) return "PAYED";
     if (hasContent()) return "IN_PROGRESS";
@@ -871,6 +888,16 @@ export const WorkOrderPage = () => {
     event.preventDefault();
     try {
       setPdfLoading(true);
+      if (payMethod === "later") {
+        const resolved = await ensureSavedOrder("PENDING_PAYMENT", payments);
+        setStatus("PENDING_PAYMENT");
+        setShowPaymentsModal(false);
+        setTicketPdfUrl(null);
+        setTicketPdfPath(null);
+        setInvoiceUrl(null);
+        setPdfLoading(false);
+        return;
+      }
       const due = Math.max(total - paid, 0);
       const payValue = parseInputNumber(payAmountInput);
       const amount = Number.isFinite(payValue) && payValue > 0 ? payValue : due;
@@ -952,6 +979,37 @@ export const WorkOrderPage = () => {
     openInvoiceModal();
   };
 
+  const handlePendingPaymentConfirm = async () => {
+    try {
+      setPdfLoading(true);
+      const due = Math.max(total - paid, 0);
+      const payment: Payment = {
+        id: Date.now(),
+        date: orderDate || todayString,
+        method: payMethod === "later" ? "cash" : payMethod,
+        amount: due,
+      };
+      const nextPayments = [...payments, payment];
+      setPayments(nextPayments);
+
+      const resolved = await ensureSavedOrder("PAYED", nextPayments);
+      setStatus("PAYED");
+      setShowInvoiceModal(true);
+      try {
+        await generatePdfAndUpload(resolved);
+      } catch {
+        const ticket = mapOrderToTicket(resolved.order, new Date().toISOString());
+        const blob = await generateTicketPdfBlob(ticket);
+        downloadBlob(blob, `ticket-${resolved.id}.pdf`);
+      }
+    } catch (err) {
+      console.error(err);
+      alert("Не удалось завершить оплату и сформировать акт");
+    } finally {
+      setPdfLoading(false);
+    }
+  };
+
   return (
     <div className="relative mx-auto flex flex-col gap-3 p-3 max-[960px]:pt-16">
       {(loading || saving || pdfLoading) && <Loader />}
@@ -1005,11 +1063,26 @@ export const WorkOrderPage = () => {
             ) : null}
           </div>
         </div>
-        <span
-          className={`status-pill inline-block rounded-md border border-[#dcdcdc] bg-[#f7f7f7] px-3 py-1 text-xs font-bold uppercase tracking-wide status-${status.toLowerCase()}`}
-        >
-          {statusLabel}
-        </span>
+        {status === "PAYED" && (
+          <span className="status-pill inline-block rounded-md border border-[#0f9d58] bg-[#0f9d58] px-3 py-1 text-xs font-bold uppercase tracking-wide text-white">
+            {statusLabel}
+          </span>
+        )}
+        {status === "PENDING_PAYMENT" && (
+          <span className="status-pill inline-block rounded-md border border-[#8b5cf6] bg-[#8b5cf6] px-3 py-1 text-xs font-bold uppercase tracking-wide text-white">
+            {statusLabel}
+          </span>
+        )}
+        {status === "IN_PROGRESS" && (
+          <span className="status-pill inline-block rounded-md border border-[#f2994a] bg-[#f2994a] px-3 py-1 text-xs font-bold uppercase tracking-wide text-white">
+            {statusLabel}
+          </span>
+        )}
+        {status === "NEW" && (
+          <span className="status-pill inline-block rounded-md border border-[#074587] bg-[#1d4ed8] px-3 py-1 text-xs font-bold uppercase tracking-wide text-white">
+            {statusLabel}
+          </span>
+        )}
       </header>
 
       <fieldset className="contents">
@@ -1177,6 +1250,19 @@ export const WorkOrderPage = () => {
             placeholder="Причина обращения"
           />
         </div>
+
+        <div className="field flex flex-col gap-1">
+          <label className="text-[13px] font-semibold text-[#2c2c2c]">Компания</label>
+          <div className="field-row flex items-center gap-2">
+            <input
+              className="w-full rounded-md border border-[#c3c3c3] bg-white px-2.5 py-2 text-[13px] focus:outline-none"
+              type="text"
+              value={company}
+              onChange={(e) => setCompany(e.target.value)}
+              placeholder="Название компании"
+            />
+          </div>
+        </div>
       </section>
 
       <section className="mt-3 flex flex-col gap-4">
@@ -1321,7 +1407,7 @@ export const WorkOrderPage = () => {
                                   onFocus={(e) => {
                                     const rect = e.currentTarget.getBoundingClientRect();
                                     setHintPosition({
-                                      top: rect.bottom + window.scrollY,
+                                      top: rect.top + window.scrollY,
                                       left: rect.left + window.scrollX,
                                       width: rect.width,
                                     });
@@ -1340,10 +1426,11 @@ export const WorkOrderPage = () => {
                                       <ul
                                         className="hint-list fixed z-[2000] max-h-56 list-none overflow-y-auto border border-[#c3c3c3] bg-white p-0 shadow-lg"
                                         style={{
-                                          top: (hintPosition?.top ?? 0) + 4,
+                                          top: (hintPosition?.top ?? 0) - 4,
                                           left: hintPosition?.left ?? 0,
                                           minWidth: hintPosition?.width ?? 180,
                                           right: viewportWidth < 480 ? 8 : undefined,
+                                          transform: "translateY(-100%)",
                                         }}
                                       >
                                         {filteredHints.map((hint) => (
@@ -1549,19 +1636,7 @@ export const WorkOrderPage = () => {
             </div>
 
             <div className="mt-4 flex flex-col gap-2">
-              {status !== "PAYED" ? (
-                <button
-                  disabled={status === "NEW"}
-                  className={`rounded-md w-full border px-4 py-2 text-[14px] font-semibold shadow-sm ${
-                    status === "NEW"
-                      ? "cursor-not-allowed border-[#d6d6d6] bg-[#f0f0f0] text-[#888888]"
-                      : "border-[#e2b007] bg-[#ffd54f] text-[#1f1f1f] hover:bg-[#ffc930]"
-                  }`}
-                  onClick={() => setShowPaymentsModal(true)}
-                >
-                  Принять оплату
-                </button>
-              ) : (
+              {status === "PAYED" ? (
                 <button
                   className="rounded-md w-full border border-[#4a6aff] bg-[#e8edff] px-4 py-2 text-[14px] font-semibold text-[#1c2a80] shadow-sm hover:bg-[#dbe4ff]"
                   onClick={async () => {
@@ -1587,6 +1662,44 @@ export const WorkOrderPage = () => {
                   }}
                 >
                   Сохранить
+                </button>
+              ) : status === "PENDING_PAYMENT" ? (
+                <>
+                  <button
+                    className="rounded-md w-full border border-[#1f8f3a] bg-[#1fad4c] px-4 py-2 text-[14px] font-semibold text-white shadow-sm hover:bg-[#179340]"
+                    onClick={handlePendingPaymentConfirm}
+                  >
+                    Оплата принята
+                  </button>
+                  <button
+                    className="rounded-md w-full border border-[#4a6aff] bg-[#e8edff] px-4 py-2 text-[14px] font-semibold text-[#1c2a80] shadow-sm hover:bg-[#dbe4ff]"
+                    onClick={async () => {
+                      try {
+                        setPdfLoading(true);
+                        const resolved = await ensureSavedOrder("PENDING_PAYMENT", payments);
+                        if (resolved) setFromOrder(resolved.order ?? resolved);
+                      } catch (err) {
+                        console.error(err);
+                        alert("Не удалось сохранить заказ");
+                      } finally {
+                        setPdfLoading(false);
+                      }
+                    }}
+                  >
+                    Сохранить
+                  </button>
+                </>
+              ) : (
+                <button
+                  disabled={status === "NEW"}
+                  className={`rounded-md w-full border px-4 py-2 text-[14px] font-semibold shadow-sm ${
+                    status === "NEW"
+                      ? "cursor-not-allowed border-[#d6d6d6] bg-[#f0f0f0] text-[#888888]"
+                      : "border-[#e2b007] bg-[#ffd54f] text-[#1f1f1f] hover:bg-[#ffc930]"
+                  }`}
+                  onClick={() => setShowPaymentsModal(true)}
+                >
+                  Принять оплату
                 </button>
               )}
             </div>
@@ -1626,6 +1739,7 @@ export const WorkOrderPage = () => {
         handleInvoiceCreate={handleInvoiceCreate}
         ghostBtn={ghostBtn}
         smallBtn={smallBtn}
+        payButtonLabel={payMethod === "later" ? "Отсрочка платежа" : "Оплатить"}
       />
       {showInvoiceModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-3" onClick={() => setShowInvoiceModal(false)}>

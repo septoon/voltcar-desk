@@ -1,4 +1,4 @@
-export type WorkStatus = "NEW" | "IN_PROGRESS" | "PAYED";
+export type WorkStatus = "NEW" | "IN_PROGRESS" | "PENDING_PAYMENT" | "PAYED";
 
 export type LineItem = {
   id: number;
@@ -17,6 +17,7 @@ export type Payment = {
 export type OrderPayload = {
   id?: string;
   date?: string;
+  company?: string;
   customer: string;
   car: string;
   mileage?: number | null;

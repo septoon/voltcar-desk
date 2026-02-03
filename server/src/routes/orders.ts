@@ -2,12 +2,13 @@ import fs from "fs/promises";
 import path from "path";
 import { Router } from "express";
 
-type WorkStatus = "NEW" | "IN_PROGRESS" | "PAYED";
+type WorkStatus = "NEW" | "IN_PROGRESS" | "PENDING_PAYMENT" | "PAYED";
 type LineItem = { id: number; title: string; qty: number; price: number };
 type Payment = { id: number; date: string; method: string; amount: number };
 type Order = {
   id: string;
   date: string;
+  company: string;
   customer: string;
   phone: string | null;
   car: string;
@@ -29,11 +30,32 @@ const dataDir = path.join(process.cwd(), "data");
 const ordersPath = path.join(dataDir, "orders.json");
 
 const deriveStatus = (order: Order): WorkStatus => {
+  // Статус, выставленный явно, не переписываем
   if (order.status === "PAYED") return "PAYED";
+  if (order.status === "PENDING_PAYMENT") return "PENDING_PAYMENT";
+  if (order.status === "IN_PROGRESS") return "IN_PROGRESS";
+  if (order.status === "NEW") {
+    const hasContent =
+      Boolean(
+        (order.company && order.company.trim()) ||
+          (order.customer && order.customer.trim()) ||
+          (order.phone && order.phone.trim()) ||
+          (order.car && order.car.trim()) ||
+          (order.govNumber && order.govNumber.trim()) ||
+          (order.vinNumber && order.vinNumber.trim()) ||
+          (order.reason && order.reason.trim()) ||
+          (order.services && order.services.length) ||
+          (order.parts && order.parts.length),
+      );
+    return hasContent ? "IN_PROGRESS" : "NEW";
+  }
+
+  // Если статус не указан, решаем по платежам/контенту
   if (order.payments && order.payments.length > 0) return "PAYED";
   const hasContent =
     Boolean(
-      (order.customer && order.customer.trim()) ||
+      (order.company && order.company.trim()) ||
+        (order.customer && order.customer.trim()) ||
         (order.phone && order.phone.trim()) ||
         (order.car && order.car.trim()) ||
         (order.govNumber && order.govNumber.trim()) ||
@@ -60,6 +82,7 @@ const readOrders = async (): Promise<Order[]> => {
   const parsed = JSON.parse(raw) as Order[];
   return parsed.map((o) => ({
     ...o,
+    company: (o as any).company ?? "",
     status: deriveStatus(o),
     pdfUrl: (o as any).pdfUrl ?? null,
     pdfPath: (o as any).pdfPath ?? null,
@@ -100,6 +123,7 @@ ordersRouter.post("/", async (req, res) => {
   const order: Order = {
     id,
     date: payload.date ?? now,
+    company: (payload as any).company ?? "",
     customer: payload.customer ?? "",
     phone: (payload as any).phone ?? null,
     car: payload.car ?? "",
@@ -135,6 +159,7 @@ ordersRouter.put("/:id", async (req, res) => {
     ...payload,
     id: current.id,
     date: payload.date ?? current.date,
+    company: (payload as any).company ?? current.company ?? "",
     customer: payload.customer ?? current.customer,
     car: payload.car ?? current.car,
     phone: (payload as any).phone ?? current.phone ?? null,

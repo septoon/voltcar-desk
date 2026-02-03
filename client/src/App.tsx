@@ -8,8 +8,9 @@ import { LoginPage } from "./pages/LoginPage";
 import { OrdersHistoryPage } from "./pages/OrdersHistoryPage";
 import { RevenuePage } from "./pages/RevenuePage";
 import { ServicesPage } from "./pages/ServicesPage";
-import { TicketsPage } from "./pages/TicketsPage";
+import { CompaniesPage } from "./pages/CompaniesPage";
 import { WorkOrderPage } from "./pages/WorkOrderPage";
+import { PendingPaymentsPage } from "./pages/PendingPaymentsPage";
 
 const App = () => (
   <Routes>
@@ -18,7 +19,8 @@ const App = () => (
       <Route path="/" element={<AppShell />}>
         <Route index element={<HomePage />} />
         <Route path="orders/history" element={<OrdersHistoryPage />} />
-        <Route path="tickets" element={<TicketsPage />} />
+        <Route path="companies" element={<CompaniesPage />} />
+        <Route path="pending-payments" element={<PendingPaymentsPage />} />
         <Route path="clients/search" element={<ClientSearchPage />} />
         <Route path="reports/revenue" element={<RevenuePage />} />
         <Route path="services" element={<ServicesPage />} />

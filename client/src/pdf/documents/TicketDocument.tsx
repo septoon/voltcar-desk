@@ -27,6 +27,7 @@ const styles = StyleSheet.create({
   company: {
     textAlign: "center",
     fontWeight: 700,
+    marginTop: 16,
     marginBottom: 2,
   },
   subtitle: {
@@ -130,7 +131,7 @@ const styles = StyleSheet.create({
   signatureLine: {
     borderBottomWidth: 1,
     borderColor: "#000",
-    minWidth: 160,
+    minWidth: 100,
   },
 });
 
@@ -291,27 +292,27 @@ export const TicketDocument = ({ ticket }: { ticket: Ticket }) => {
         <View style={styles.infoTable} wrap={false}>
           <View style={styles.infoRow}>
             <View style={[styles.infoCell, { flex: 1 }]}>
-              <InfoRow label="Заказчик:" value={ticket.customerName} />
+              <InfoRow label="Заказчик: " value={ticket.customerName} />
             </View>
             <View style={[styles.infoCell, { flex: 1 }]}>
-              <InfoRow label="Телефон заказчика:" value={ticket.phone} />
+              <InfoRow label="Телефон заказчика: " value={ticket.phone} />
             </View>
             <View style={[styles.infoCell, styles.infoWide]}>
-              <InfoRow label="Вид ремонта:" value={ticket.service} />
+              <InfoRow label="Вид ремонта: " value={ticket.service} />
             </View>
           </View>
           <View style={styles.infoRow}>
             <View style={[styles.infoCell, { flex: 1 }]}>
-              <InfoRow label="Автомобиль:" value={ticket.vehicle} />
+              <InfoRow label="Автомобиль: " value={ticket.vehicle} />
             </View>
             <View style={[styles.infoCell, { flex: 0.8 }]}>
-              <InfoRow label="Гос. номер:" value={ticket.govNumber} />
+              <InfoRow label="Гос. номер: " value={ticket.govNumber} />
             </View>
             <View style={[styles.infoCell, { flex: 1 }]}>
-              <InfoRow label="VIN:" value={ticket.vinNumber} />
+              <InfoRow label="VIN: " value={ticket.vinNumber} />
             </View>
             <View style={[styles.infoCell, { flex: 0.7 }, styles.noBorder]}>
-              <InfoRow label="Пробег:" value={ticket.mileage ? `${ticket.mileage} км` : "—"} />
+              <InfoRow label="Пробег: " value={ticket.mileage ? `${ticket.mileage} км` : ""} />
             </View>
           </View>
         </View>
