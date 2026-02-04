@@ -74,7 +74,19 @@ export const PendingPaymentsPage = () => {
       } catch (err) {
         console.error("Не удалось загрузить акт, попробуйте в истории заказов", err);
       }
+      try {
+        localStorage.removeItem(`order-draft-${order.id}`);
+      } catch {
+        // ignore
+      }
       setOrders((prev) => prev.map((o) => (o.id === order.id ? { ...updated, status: "PAYED" } : o)));
+      // подтягиваем свежие данные, чтобы гарантировать корректный статус и суммы
+      try {
+        const fresh = await fetchOrders();
+        setOrders(fresh);
+      } catch (err) {
+        console.warn("Не удалось обновить список заказов после оплаты", err);
+      }
     } catch (err) {
       console.error(err);
       setError("Не удалось завершить оплату");

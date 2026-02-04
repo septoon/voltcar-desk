@@ -121,11 +121,13 @@ const styles = StyleSheet.create({
   },
   tableRow: {
     flexDirection: "row",
-    borderBottomWidth: 0,
+    borderBottomWidth: 1,
     borderColor: "#000",
   },
   tableRowLast: {
+    flexDirection: "row",
     borderBottomWidth: 0,
+    borderColor: "#000",
   },
   cell: {
     paddingVertical: 6,
@@ -172,11 +174,6 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 6,
-  },
-  signatureLine: {
-    borderBottomWidth: 1,
-    borderColor: "#000",
-    minWidth: 80,
   },
 });
 
@@ -263,10 +260,12 @@ const TableHeader = ({ title }: { title: string }) => (
   </View>
 );
 
-const TableRow = ({ item, index }: { item: TicketLine; index: number }) => {
+const TableRow = ({ item, index, total }: { item: TicketLine; index: number; total: number }) => {
   const sum = item.qty * item.price;
+  const isLast = index === total - 1;
+
   return (
-    <View style={styles.tableRow}>
+    <View style={isLast ? styles.tableRowLast : styles.tableRow}>
       <Text style={[styles.cell, { width: columns[0].width, textAlign: "right" }]}>{index + 1}</Text>
       <Text style={[styles.cell, { width: columns[1].width }]}>{item.title}</Text>
       <Text style={[styles.cell, { width: columns[2].width, textAlign: "right" }]}>{item.qty}</Text>
@@ -344,7 +343,7 @@ export const TicketDocument = ({ ticket }: { ticket: Ticket }) => {
         <View style={styles.table}>
           <TableHeader title="Наименование" />
           {services.map((item, i) => (
-            <TableRow key={i} item={item} index={i} />
+            <TableRow key={i} item={item} index={i} total={services.length} />
           ))}
         </View>
 
@@ -357,8 +356,8 @@ export const TicketDocument = ({ ticket }: { ticket: Ticket }) => {
         {/* Signature */}
         <View style={styles.signature}>
           <View style={styles.signatureRow}>
-            <Text>Мастер</Text>
-            <View style={styles.signatureLine} />
+            <Text>Мастер:</Text>
+            <Text>____________</Text>
             <Text>/ Заргарян А. Д.</Text>
           </View>
         </View>
