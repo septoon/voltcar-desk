@@ -32,8 +32,7 @@ export const LoginPage = () => {
         onSubmit={handleSubmit}
         className="w-full max-w-md rounded-2xl border border-[#e5e5e5] bg-white p-6 shadow-sm"
       >
-        <h1 className="text-2xl font-bold text-[#1f1f1f] mb-1">Вольт Авто</h1>
-        <p className="text-sm text-[#4b5563] mb-4">Вход</p>
+        <h1 className="text-2xl mb-4 font-bold text-[#1f1f1f]">Вольт Авто</h1>
 
         <label className="mb-3 block text-sm font-semibold text-[#1f1f1f]">
           Логин

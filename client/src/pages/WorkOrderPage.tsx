@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useNavigate, useParams } from "react-router-dom";
 import { IMaskInput } from "react-imask";
@@ -219,21 +219,6 @@ export const WorkOrderPage = () => {
         payments.length,
     );
 
-  const hasOrderContent = (order: Partial<OrderPayload>) =>
-    Boolean(
-      (order as any).company?.toString().trim() ||
-        order.customer?.toString().trim() ||
-        order.phone?.toString().trim() ||
-        order.car?.toString().trim() ||
-        order.govNumber?.toString().trim() ||
-        order.vinNumber?.toString().trim() ||
-        order.reason?.toString().trim() ||
-        (order.services && order.services.length) ||
-        (order.parts && order.parts.length) ||
-        (order.payments && order.payments.length) ||
-        (order.mileage && order.mileage > 0),
-    );
-
   const discountValue = useMemo(() => {
     const amount = parseInputNumber(discountAmount);
     const percent = parseInputNumber(discountPercent);
@@ -257,12 +242,8 @@ export const WorkOrderPage = () => {
 
   const baseBtn =
     "border text-[#1f1f1f] font-semibold leading-tight focus:outline-none disabled:opacity-60 disabled:cursor-not-allowed";
-  const neutralBtn = `${baseBtn} border-[#b5b5b5] bg-[#f0f0f0] hover:bg-[#e0e0e0]`;
-  const successBtn = `${baseBtn} border-[#caa200] bg-[#ffd659] hover:bg-[#f2c94d]`;
   const ghostBtn = `${baseBtn} border-[#cfcfcf] bg-transparent hover:bg-[#f0f0f0]`;
-  const outlineBtn = `${baseBtn} border-[#c3c3c3] bg-white hover:bg-[#f7f7f7]`;
   const smallBtn = "px-3 py-2 text-sm";
-  const regularBtn = "px-4 py-2 text-sm md:text-base";
 
   const hasDraftContent = (draft: Partial<OrderPayload>) => {
     if (!draft) return false;
@@ -429,6 +410,7 @@ export const WorkOrderPage = () => {
 
     load();
     return () => controller.abort();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [orderNumber, todayString, draftKey]);
 
   useEffect(() => {
@@ -517,7 +499,7 @@ export const WorkOrderPage = () => {
     setCarHints(uniq);
     const brandMap: Record<string, string[]> = {};
     uniq.forEach((full) => {
-      const [brandRaw, ...rest] = full.split(/\s+/);
+      const [brandRaw] = full.split(/\s+/);
       if (!brandRaw) return;
       const brand = brandRaw.trim();
       const models = brandMap[brand] ?? [];
@@ -578,7 +560,7 @@ export const WorkOrderPage = () => {
     setCarFilteredBrands(matchesBrands);
     setCarFilteredModels(matchesBrands.length ? [] : fallbackModels);
     setShowCarHints(matchesBrands.length > 0 || fallbackModels.length > 0);
-  }, [car, carBrandMap, selectedCarBrand]);
+  }, [car, carBrandMap, selectedCarBrand, carHints]);
 
   useEffect(() => {
     const hideMenu = () => setContextMenu({ visible: false });
@@ -766,7 +748,7 @@ export const WorkOrderPage = () => {
     return { onClick, onContextMenu, onDoubleClick, onTouchStart, onTouchEnd };
   };
 
-  const saveInlineEdit = () => {
+  const saveInlineEdit = useCallback(() => {
     if (!editingRow || !editingDraft) return;
     const { kind, id } = editingRow;
     const title = editingDraft.title.trim();
@@ -786,7 +768,7 @@ export const WorkOrderPage = () => {
     setEditingRow(null);
     setEditingDraft(null);
     setShowHintsFor(null);
-  };
+  }, [editingDraft, editingRow]);
 
   useEffect(() => {
     const handleOutside = (event: MouseEvent) => {
@@ -799,7 +781,7 @@ export const WorkOrderPage = () => {
     return () => {
       window.removeEventListener("mousedown", handleOutside);
     };
-  }, [editingRow, editingDraft]);
+  }, [editingRow, saveInlineEdit]);
 
   const handleEditKeyDown = (event: React.KeyboardEvent) => {
     if (event.key === "Enter") {
@@ -921,21 +903,6 @@ export const WorkOrderPage = () => {
     return { order: saved ?? { ...orderPayload(), id: resolvedId }, id: String(resolvedId) };
   };
 
-  const generatePdfAndDownload = async () => {
-    try {
-      setPdfLoading(true);
-      const { order, id } = await ensureSavedOrder();
-      const blob = await generateTicketPdfBlob(mapOrderToTicket(order, new Date().toISOString()));
-      downloadBlob(blob, `ticket-${id}.pdf`);
-    } catch (err) {
-      console.error(err);
-      const msg = (err as any)?.message || "Не удалось сформировать PDF";
-      alert(msg);
-    } finally {
-      setPdfLoading(false);
-    }
-  };
-
   const generatePdfAndUpload = async (resolved?: { order: OrderPayload; id: string }) => {
     const target = resolved ?? (await ensureSavedOrder());
     try {
@@ -973,7 +940,7 @@ export const WorkOrderPage = () => {
     try {
       setPdfLoading(true);
       if (payMethod === "later") {
-        const resolved = await ensureSavedOrder("PENDING_PAYMENT", payments);
+        await ensureSavedOrder("PENDING_PAYMENT", payments);
         setStatus("PENDING_PAYMENT");
         setShowPaymentsModal(false);
         setTicketPdfUrl(null);

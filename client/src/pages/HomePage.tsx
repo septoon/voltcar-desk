@@ -8,7 +8,6 @@ import { createAppointment, deleteAppointment, fetchAppointments, updateAppointm
 import { fetchServices } from "../api/services";
 import { Appointment, AppointmentPayload, AppointmentStatus } from "../types/appointment";
 import { useNavigate } from "react-router-dom";
-import { Loader } from "../components/Loader";
 import { IMaskInput } from "react-imask";
 import cars from "../data/cars.json";
 

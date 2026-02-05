@@ -33,10 +33,11 @@ const styles = StyleSheet.create({
   company: {
     fontWeight: 700,
     fontSize: 10,
-    marginBottom: 2,
+    marginBottom: 12,
   },
   muted: {
     fontSize: 9.5,
+    marginBottom: 5,
   },
   subtitle: {
     textAlign: "center",
@@ -130,7 +131,7 @@ const styles = StyleSheet.create({
     borderColor: "#000",
   },
   cell: {
-    paddingVertical: 6,
+    paddingVertical: 4,
     paddingHorizontal: 7,
     borderRightWidth: 1,
     borderColor: "#000",
@@ -217,30 +218,6 @@ const InfoInline = ({ label, value }: { label: string; value?: string | number |
   </Text>
 );
 
-const InfoBlock = ({ label, value }: { label: string; value?: string | number | null }) => {
-  const v = norm(value);
-
-  // If there is no value, render label + dash on ONE line
-  if (!v) {
-    return (
-      <View>
-        <Text style={styles.infoLabel}>
-          {label}
-          <Text style={{ fontWeight: 400 }}> —</Text>
-        </Text>
-      </View>
-    );
-  }
-
-  // Normal case: label on first line, value on second line
-  return (
-    <View>
-      <Text style={styles.infoLabel}>{label}</Text>
-      <Text style={styles.infoValue}>{v}</Text>
-    </View>
-  );
-};
-
 type TableColumn = { width: string | number };
 const columns: TableColumn[] = [
   { width: 36 },
@@ -279,6 +256,19 @@ const TableRow = ({ item, index, total }: { item: TicketLine; index: number; tot
 export const TicketDocument = ({ ticket }: { ticket: Ticket }) => {
   const services = ticket.services ?? [];
   const servicesTotal = services.reduce((a, i) => a + i.qty * i.price, 0);
+  const parts = ticket.parts ?? [];
+  const partsTotal = parts.reduce((a, i) => a + i.qty * i.price, 0);
+  const subtotal = servicesTotal + partsTotal;
+
+  const discountPercentRaw = ticket.discountPercent ?? 0;
+  const discountPercent = Number.isFinite(Number(discountPercentRaw)) ? Number(discountPercentRaw) : 0;
+  const discountAmountRaw = ticket.discountAmount ?? 0;
+  const discountAmountNum = Number(discountAmountRaw);
+  const hasAmount = Number.isFinite(discountAmountNum) && discountAmountNum > 0;
+  const discountAmount = hasAmount ? discountAmountNum : 0;
+  const discountFromPercent = discountPercent ? (subtotal * discountPercent) / 100 : 0;
+  const discountValue = Math.min(hasAmount ? discountAmount : discountFromPercent, subtotal);
+  const grandTotal = Math.max(subtotal - discountValue, 0);
 
   const issuedAt = formatIssuedAt(ticket.issuedAt);
   const number = ticket.number ?? ticket.id ?? "";
@@ -343,14 +333,54 @@ export const TicketDocument = ({ ticket }: { ticket: Ticket }) => {
         <View style={styles.table}>
           <TableHeader title="Наименование" />
           {services.map((item, i) => (
-            <TableRow key={i} item={item} index={i} total={services.length} />
+            <TableRow key={`svc-${i}`} item={item} index={i} total={services.length} />
           ))}
+          {services.length === 0 ? (
+            <View style={styles.tableRowLast}>
+              <Text style={[styles.cell, styles.cellLast, { width: "100%", textAlign: "center" }]}>
+                Работы отсутствуют
+              </Text>
+            </View>
+          ) : null}
         </View>
 
+        {/* Parts */}
+        {parts.length > 0 && (
+          <>
+            <Text style={styles.sectionTitle}>Запчасти по заказ-наряду № {number} от {issuedAt}</Text>
+            <View style={styles.table}>
+              <TableHeader title="Наименование" />
+              {parts.map((item, i) => (
+                <TableRow key={`part-${i}`} item={item} index={i} total={parts.length} />
+              ))}
+            </View>
+          </>
+        )}
+
         {/* Totals */}
-        <View style={styles.totalsRightLine}>
-          <Text style={styles.totalsRightLabel}>Итого по заказ-наряду:</Text>
-          <Text style={styles.totalsRightValue}>{currency(servicesTotal)}</Text>
+        <View style={[styles.totalsRightLine, { flexDirection: "column", alignItems: "flex-end", gap: 4 }]}>
+          <View style={{ flexDirection: "row", gap: 6 }}>
+            <Text style={styles.totalsRightLabel}>Работы:</Text>
+            <Text style={styles.totalsRightValue}>{currency(servicesTotal)}</Text>
+          </View>
+          {parts.length > 0 && (
+            <View style={{ flexDirection: "row", gap: 6 }}>
+              <Text style={styles.totalsRightLabel}>Запчасти:</Text>
+              <Text style={styles.totalsRightValue}>{currency(partsTotal)}</Text>
+            </View>
+          )}
+          {discountValue > 0 && (
+            <View style={{ flexDirection: "row", gap: 6 }}>
+              <Text style={styles.totalsRightLabel}>
+                {discountPercent > 0 ? `Скидка ${discountPercent}%:` : "Скидка:"}
+              </Text>
+              <Text style={styles.totalsRightValue}>- {currency(discountValue)}</Text>
+            </View>
+          )}
+          <View style={{ flexDirection: "row", gap: 6 }}>
+            <Text style={styles.totalsRightLabel}>Итого по заказ-наряду:</Text>
+            <Text style={styles.totalsRightValue}>{currency(grandTotal)}</Text>
+          </View>
         </View>
 
         {/* Signature */}

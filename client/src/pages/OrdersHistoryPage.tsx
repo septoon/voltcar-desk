@@ -80,7 +80,6 @@ export const OrdersHistoryPage = () => {
   const [tickets, setTickets] = useState<TicketInfo[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
-  const [query, setQuery] = useState("");
   const [advancedQuery, setAdvancedQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<WorkStatus | "">("");
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -114,37 +113,47 @@ export const OrdersHistoryPage = () => {
     load();
   }, []);
 
-  const filtered = useMemo(() => {
-    const q = query.trim().toLowerCase();
-    const qDigits = q.replace(/\D/g, "");
-    const adv = advancedQuery.trim().toLowerCase();
-    const advDigits = adv.replace(/\D/g, "");
-    const normalize = (val?: string | null) => (val ? String(val).toLowerCase() : "");
-    const digits = (val?: string | null) => (val ? String(val).replace(/\D/g, "") : "");
-    return orders.filter((o) => {
-      const haystack = [
-        normalize(o.id),
-        normalize(o.customer),
-        normalize((o as any).company),
-        normalize(o.car),
-        normalize(o.govNumber),
-        normalize(o.vinNumber),
-        normalize(o.phone),
-        normalize(o.reason),
-      ]
-        .filter(Boolean)
-        .join(" ");
+const filtered = useMemo(() => {
+  const adv = advancedQuery.trim().toLowerCase();
+  const advDigits = adv.replace(/\D/g, "");
+  const normalize = (val?: string | null) => (val ? String(val).toLowerCase() : "");
+  const digits = (val?: string | null) => (val ? String(val).replace(/\D/g, "") : "");
 
-      const haystackDigits = [digits(o.phone), digits(o.govNumber), digits(o.id)].filter(Boolean).join(" ");
+  const result = orders.filter((o) => {
+    const haystack = [
+      normalize(o.id),
+      normalize(o.customer),
+      normalize((o as any).company),
+      normalize(o.car),
+      normalize(o.govNumber),
+      normalize(o.vinNumber),
+      normalize(o.phone),
+      normalize(o.reason),
+    ]
+      .filter(Boolean)
+      .join(" ");
 
-      const matchQuery = q ? haystack.includes(q) || (qDigits ? haystackDigits.includes(qDigits) : false) : true;
-      const matchAdv = adv
-        ? haystack.includes(adv) || (advDigits ? haystackDigits.includes(advDigits) : false)
-        : true;
-      const matchStatus = statusFilter ? normalizeStatus(o.status) === statusFilter : true;
-      return matchQuery && matchAdv && matchStatus;
-    });
-  }, [orders, query, advancedQuery, statusFilter]);
+    const haystackDigits = [digits(o.phone), digits(o.govNumber), digits(o.id)].filter(Boolean).join(" ");
+
+    const matchAdv = adv
+      ? haystack.includes(adv) || (advDigits ? haystackDigits.includes(advDigits) : false)
+      : true;
+    const matchStatus = statusFilter ? normalizeStatus(o.status) === statusFilter : true;
+
+    return matchAdv && matchStatus;
+  });
+
+  // сортировка по id (DESC)
+  return result.slice().sort((a, b) => {
+    const aNum = Number(String(a.id ?? "").replace(/\D/g, ""));
+    const bNum = Number(String(b.id ?? "").replace(/\D/g, ""));
+    // если оба нормально парсятся — сравниваем как числа
+    if (Number.isFinite(aNum) && Number.isFinite(bNum) && (a.id != null) && (b.id != null)) {
+      return bNum - aNum;
+    }
+    return String(b.id ?? "").localeCompare(String(a.id ?? ""), "ru");
+  });
+}, [orders, advancedQuery, statusFilter]);
 
   const handleDelete = async (id: string) => {
     const order = orders.find((o) => o.id === id);
