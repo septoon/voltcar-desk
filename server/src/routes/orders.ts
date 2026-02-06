@@ -20,6 +20,7 @@ type Order = {
   services: LineItem[];
   parts: LineItem[];
   payments: Payment[];
+  prepayment: number | null;
   discountPercent: number | null;
   discountAmount: number | null;
   pdfUrl: string | null;
@@ -40,12 +41,13 @@ const deriveStatus = (order: Order): WorkStatus => {
         (order.company && order.company.trim()) ||
           (order.customer && order.customer.trim()) ||
           (order.phone && order.phone.trim()) ||
-          (order.car && order.car.trim()) ||
-          (order.govNumber && order.govNumber.trim()) ||
-          (order.vinNumber && order.vinNumber.trim()) ||
-          (order.reason && order.reason.trim()) ||
-          (order.services && order.services.length) ||
-          (order.parts && order.parts.length),
+        (order.car && order.car.trim()) ||
+        (order.govNumber && order.govNumber.trim()) ||
+        (order.vinNumber && order.vinNumber.trim()) ||
+        (order.reason && order.reason.trim()) ||
+        (order.services && order.services.length) ||
+        (order.parts && order.parts.length) ||
+        (order.prepayment && order.prepayment > 0),
       );
     return hasContent ? "IN_PROGRESS" : "NEW";
   }
@@ -62,7 +64,8 @@ const deriveStatus = (order: Order): WorkStatus => {
         (order.vinNumber && order.vinNumber.trim()) ||
         (order.reason && order.reason.trim()) ||
         (order.services && order.services.length) ||
-        (order.parts && order.parts.length),
+        (order.parts && order.parts.length) ||
+        (order.prepayment && order.prepayment > 0),
     );
   return hasContent ? "IN_PROGRESS" : "NEW";
 };
@@ -84,6 +87,7 @@ const readOrders = async (): Promise<Order[]> => {
     ...o,
     company: (o as any).company ?? "",
     status: deriveStatus(o),
+    prepayment: (o as any).prepayment ?? 0,
     pdfUrl: (o as any).pdfUrl ?? null,
     pdfPath: (o as any).pdfPath ?? null,
   }));
@@ -135,6 +139,7 @@ ordersRouter.post("/", async (req, res) => {
     services: payload.services ?? [],
     parts: payload.parts ?? [],
     payments: payload.payments ?? [],
+    prepayment: payload.prepayment ?? 0,
     discountPercent: payload.discountPercent ?? null,
     discountAmount: payload.discountAmount ?? null,
     pdfUrl: payload.pdfUrl ?? null,
@@ -171,6 +176,7 @@ ordersRouter.put("/:id", async (req, res) => {
     services: payload.services ?? current.services,
     parts: payload.parts ?? current.parts,
     payments: payload.payments ?? current.payments,
+    prepayment: payload.prepayment ?? current.prepayment ?? 0,
     discountPercent: payload.discountPercent ?? current.discountPercent ?? null,
     discountAmount: payload.discountAmount ?? current.discountAmount ?? null,
     pdfUrl: payload.pdfUrl ?? current.pdfUrl ?? null,

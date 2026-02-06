@@ -22,12 +22,12 @@ const sumLineItems = (items: { qty: number; price: number }[]) => items.reduce((
 const computeTotal = (order: OrderPayload) => {
   const services = sumLineItems(order.services ?? []);
   const parts = sumLineItems(order.parts ?? []);
-  const subtotal = services + parts;
-  const discount =
-    typeof order.discountAmount === "number" && order.discountAmount
-      ? order.discountAmount
-      : ((order.discountPercent ?? 0) / 100) * subtotal;
-  return Math.max(subtotal - (discount || 0), 0);
+  const discountBase = services;
+  const discountAmount = typeof order.discountAmount === "number" && order.discountAmount ? order.discountAmount : 0;
+  const discountPercent = order.discountPercent ?? 0;
+  const discountFromPercent = (discountBase * discountPercent) / 100;
+  const discountValue = Math.min(Math.max(discountAmount > 0 ? discountAmount : discountFromPercent, 0), discountBase);
+  return Math.max(discountBase - discountValue, 0) + parts;
 };
 
 const parseDate = (value?: string) => {

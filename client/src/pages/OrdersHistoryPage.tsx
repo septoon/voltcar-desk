@@ -10,12 +10,12 @@ const sumLineItems = (items: { qty: number; price: number }[]) => items.reduce((
 const computeTotal = (order: OrderPayload) => {
   const services = sumLineItems(order.services ?? []);
   const parts = sumLineItems(order.parts ?? []);
-  const subtotal = services + parts;
-  const discount =
-    typeof order.discountAmount === "number" && order.discountAmount
-      ? order.discountAmount
-      : ((order.discountPercent ?? 0) / 100) * subtotal;
-  return Math.max(subtotal - (discount || 0), 0);
+  const discountBase = services;
+  const discountAmount = typeof order.discountAmount === "number" && order.discountAmount ? order.discountAmount : 0;
+  const discountPercent = order.discountPercent ?? 0;
+  const discountFromPercent = (discountBase * discountPercent) / 100;
+  const discountValue = Math.min(Math.max(discountAmount > 0 ? discountAmount : discountFromPercent, 0), discountBase);
+  return Math.max(discountBase - discountValue, 0) + parts;
 };
 
 const statusLabels: Record<WorkStatus, string> = {
@@ -38,7 +38,8 @@ const hasDraftContent = (draft: Partial<OrderPayload>) =>
         (draft.services && draft.services.length) ||
         (draft.parts && draft.parts.length) ||
         (draft.payments && draft.payments.length) ||
-        (draft.mileage && draft.mileage > 0)),
+        (draft.mileage && draft.mileage > 0) ||
+        (typeof draft.prepayment === "number" && draft.prepayment > 0)),
   );
 
 const mergeDraft = (order: OrderPayload): OrderPayload => {
@@ -55,6 +56,7 @@ const mergeDraft = (order: OrderPayload): OrderPayload => {
       services: draft.services ?? order.services ?? [],
       parts: draft.parts ?? order.parts ?? [],
       payments: draft.payments ?? order.payments ?? [],
+      prepayment: draft.prepayment ?? order.prepayment ?? 0,
     };
   } catch {
     return order;
@@ -264,6 +266,9 @@ const filtered = useMemo(() => {
               const orderTickets = tickets.filter(
                 (t) => (t.ticketId && t.ticketId === order.id) || t.name.includes(order.id ?? "")
               );
+              const total = computeTotal(order);
+              const prepayment = Number(order.prepayment ?? 0) || 0;
+              const st = normalizeStatus(order.status);
               return (
                 <tr
                   key={order.id}
@@ -280,7 +285,14 @@ const filtered = useMemo(() => {
                   <td className="border border-[#dcdcdc] px-3 py-2">{order.customer || "—"}</td>
                   <td className="border border-[#dcdcdc] px-3 py-2">{order.car || "—"}</td>
                   <td className="border border-[#dcdcdc] px-3 py-2 text-right">
-                    {computeTotal(order).toLocaleString("ru-RU")}
+                    {prepayment > 0 && st !== "PAYED" ? (
+                      <>
+                        {total.toLocaleString("ru-RU")}{" / "}
+                        <span className="text-[#008000]">{prepayment.toLocaleString("ru-RU")}</span>
+                      </>
+                    ) : (
+                      total.toLocaleString("ru-RU")
+                    )}
                   </td>
                   <td className="border border-[#dcdcdc] px-3 py-2">
                     {orderTickets.length === 0 ? (

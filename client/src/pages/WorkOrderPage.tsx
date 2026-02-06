@@ -5,6 +5,7 @@ import { IMaskInput } from "react-imask";
 import { createOrder, fetchOrder, updateOrder } from "../api/orders";
 import { fetchServices } from "../api/services";
 import { api } from "../api/api";
+import { deleteTicketFile } from "../api/tickets";
 import { generateAndUploadTicketPdf } from "../features/tickets/actions/generateAndUploadTicketPdf";
 import { generateTicketPdfBlob, downloadBlob } from "../pdf/generateTicketPdf";
 import { LineItem, OrderPayload, Payment, WorkStatus } from "../types";
@@ -102,6 +103,9 @@ export const WorkOrderPage = () => {
   const [parts, setParts] = useState<LineItem[]>([]);
   const [payments, setPayments] = useState<Payment[]>([]);
   const [showPaymentsModal, setShowPaymentsModal] = useState(false);
+  const [prepaymentInput, setPrepaymentInput] = useState<string>("");
+  const [showPrepaymentModal, setShowPrepaymentModal] = useState(false);
+  const [prepaymentDraft, setPrepaymentDraft] = useState<string>("");
   const [selectedRow, setSelectedRow] = useState<{ kind: TableKind; id: number } | null>(null);
   const [contextMenu, setContextMenu] = useState<
     | {
@@ -131,11 +135,11 @@ export const WorkOrderPage = () => {
   const [hintPosition, setHintPosition] = useState<{ top: number; left: number; width: number } | null>(null);
   const hintSelectionRef = useRef(false);
   const draftKey = useMemo(() => `order-draft-${orderNumber || "new"}`, [orderNumber]);
-  const [discountPercent, setDiscountPercent] = useState("0");
-  const [discountAmount, setDiscountAmount] = useState("0");
+  const [discountPercent, setDiscountPercent] = useState("");
+  const [discountAmount, setDiscountAmount] = useState("");
   const [pdfLoading, setPdfLoading] = useState(false);
   const [payMethod, setPayMethod] = useState<"cash" | "card" | "later">("cash");
-  const [payAmountInput, setPayAmountInput] = useState<string>("0");
+  const [payAmountInput, setPayAmountInput] = useState<string>("");
   const [showInvoiceModal, setShowInvoiceModal] = useState(false);
   const [ticketPdfUrl, setTicketPdfUrl] = useState<string | null>(null);
   const [ticketPdfPath, setTicketPdfPath] = useState<string | null>(null);
@@ -187,6 +191,8 @@ export const WorkOrderPage = () => {
 
   const servicesTotal = useMemo(() => sumLineItems(services), [services]);
   const partsTotal = useMemo(() => sumLineItems(parts), [parts]);
+  // subtotal сохранили только ради возможного будущего использования, пока отключаем предупреждение
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const subtotal = servicesTotal + partsTotal;
   const paid = useMemo(() => payments.reduce((acc, payment) => acc + payment.amount, 0), [payments]);
 
@@ -223,13 +229,13 @@ export const WorkOrderPage = () => {
     const amount = parseInputNumber(discountAmount);
     const percent = parseInputNumber(discountPercent);
     if (!Number.isNaN(amount) && amount > 0) {
-      return Math.min(amount, subtotal);
+      return Math.min(amount, servicesTotal);
     }
     if (!Number.isNaN(percent) && percent > 0) {
-      return Math.min((subtotal * percent) / 100, subtotal);
+      return Math.min((servicesTotal * percent) / 100, servicesTotal);
     }
     return 0;
-  }, [discountAmount, discountPercent, subtotal]);
+  }, [discountAmount, discountPercent, servicesTotal]);
 
   const hasDiscountInput = useMemo(() => {
     const amount = parseInputNumber(discountAmount);
@@ -238,7 +244,13 @@ export const WorkOrderPage = () => {
     const hasPercent = discountPercent.trim() !== "" && !Number.isNaN(percent) && percent !== 0;
     return hasAmount || hasPercent;
   }, [discountAmount, discountPercent]);
-  const total = Math.max(subtotal - discountValue, 0);
+  const prepaymentValue = useMemo(() => {
+    const val = parseInputNumber(prepaymentInput);
+    if (Number.isNaN(val) || val <= 0) return 0;
+    return val;
+  }, [prepaymentInput]);
+  const total = Math.max(servicesTotal - discountValue, 0) + partsTotal;
+  const outstanding = Math.max(total - prepaymentValue - paid, 0);
 
   const baseBtn =
     "border text-[#1f1f1f] font-semibold leading-tight focus:outline-none disabled:opacity-60 disabled:cursor-not-allowed";
@@ -258,7 +270,8 @@ export const WorkOrderPage = () => {
       (draft.services && draft.services.length) ||
       (draft.parts && draft.parts.length) ||
       (draft.payments && draft.payments.length) ||
-      (draft.mileage && draft.mileage > 0),
+      (draft.mileage && draft.mileage > 0) ||
+      (typeof draft.prepayment === "number" && draft.prepayment > 0),
     );
   };
 
@@ -276,10 +289,11 @@ export const WorkOrderPage = () => {
     setServices([]);
     setParts([]);
     setPayments([]);
+    setPrepaymentInput("");
     setSelectedRow(null);
     setContextMenu({ visible: false });
-    setDiscountPercent("0");
-    setDiscountAmount("0");
+    setDiscountPercent("");
+    setDiscountAmount("");
     setTicketPdfUrl(null);
     setTicketPdfPath(null);
     setInvoiceUrl(null);
@@ -302,13 +316,19 @@ export const WorkOrderPage = () => {
     setPayments(data.payments ?? []);
     if (typeof data.discountPercent === "number" && !Number.isNaN(data.discountPercent)) {
       setDiscountPercent(String(data.discountPercent));
+    } else {
+      setDiscountPercent("");
     }
     if (typeof data.discountAmount === "number" && !Number.isNaN(data.discountAmount)) {
       setDiscountAmount(String(data.discountAmount));
+    } else {
+      setDiscountAmount("");
     }
     setTicketPdfUrl((data as any).pdfUrl ?? null);
     setTicketPdfPath((data as any).pdfPath ?? null);
     setPhone(data.phone ?? "");
+    const prepay = typeof data.prepayment === "number" && !Number.isNaN(data.prepayment) ? data.prepayment : null;
+    setPrepaymentInput(prepay && prepay > 0 ? String(prepay) : "");
   };
 
   useEffect(() => {
@@ -358,6 +378,7 @@ export const WorkOrderPage = () => {
             payments: (draft as OrderPayload).payments ?? data.payments,
             status: (draft as any).status ?? data.status,
             date: (draft as any).date ?? data.date,
+            prepayment: (draft as any).prepayment ?? data.prepayment ?? 0,
           };
           setFromOrder(combined);
           lastSavedRef.current = serializeOrder(combined);
@@ -379,6 +400,7 @@ export const WorkOrderPage = () => {
             ...(draft as OrderPayload),
             status: (draft as any).status ?? status,
             date: (draft as any).date ?? orderDate,
+            prepayment: (draft as any).prepayment ?? prepaymentValue ?? 0,
           };
           setFromOrder(fallback as OrderPayload);
           lastSavedRef.current = serializeOrder(fallback as OrderPayload);
@@ -397,6 +419,7 @@ export const WorkOrderPage = () => {
             parts,
             payments,
             date: orderDate || todayString,
+            prepayment: prepaymentValue ?? 0,
           } as OrderPayload);
           lastSavedRef.current = "";
         }
@@ -429,6 +452,7 @@ export const WorkOrderPage = () => {
       services,
       parts,
       payments,
+      prepayment: prepaymentValue,
     };
     try {
       localStorage.setItem(
@@ -438,6 +462,7 @@ export const WorkOrderPage = () => {
           company,
           discountPercent,
           discountAmount,
+          prepayment: prepaymentValue,
         }),
       );
     } catch (err) {
@@ -460,6 +485,7 @@ export const WorkOrderPage = () => {
     discountPercent,
     discountAmount,
     company,
+    prepaymentValue,
     readyToPersist,
   ]);
 
@@ -583,6 +609,7 @@ export const WorkOrderPage = () => {
     services,
     parts,
     payments,
+    prepayment: prepaymentValue,
     discountPercent: Number(discountPercent) || 0,
     discountAmount: Number(discountAmount) || 0,
     pdfUrl: ticketPdfUrl ?? undefined,
@@ -660,10 +687,47 @@ export const WorkOrderPage = () => {
   const handleStatusChange = async (next: WorkStatus) => {
     setStatusMenuOpen(false);
     if (next === status) return;
+    const shouldClearPayments = status === "PAYED" && next !== "PAYED";
+
+    if (shouldClearPayments) {
+      setPayments([]);
+      setTicketPdfUrl(null);
+      setTicketPdfPath(null);
+      setInvoiceUrl(null);
+      // best-effort удалить PDF на сервере
+      const removePdf = async () => {
+        const extractName = (value: string | null) => {
+          if (!value) return null;
+          try {
+            const withoutQuery = value.split("?")[0];
+            const parts = withoutQuery.split("/");
+            return parts[parts.length - 1] || null;
+          } catch {
+            return null;
+          }
+        };
+        const name = extractName(ticketPdfPath ?? null) ?? extractName(ticketPdfUrl ?? null);
+        if (name) {
+          try {
+            await deleteTicketFile(name, orderNumber ?? undefined);
+          } catch (err) {
+            console.warn("Не удалось удалить PDF на сервере", err);
+          }
+        }
+      };
+      removePdf().catch(() => undefined);
+    }
+
     setStatus(next);
-    const saved = await handleSave(next);
+    const saved = await handleSave(next, shouldClearPayments ? [] : payments);
     if (saved?.status) {
       setStatus(saved.status as WorkStatus);
+      if (shouldClearPayments) {
+        setPayments(saved.payments ?? []);
+        setTicketPdfUrl((saved as any)?.pdfUrl ?? null);
+        setTicketPdfPath((saved as any)?.pdfPath ?? null);
+        setInvoiceUrl(null);
+      }
     }
   };
 
@@ -949,14 +1013,30 @@ export const WorkOrderPage = () => {
         setPdfLoading(false);
         return;
       }
-      const due = Math.max(total - paid, 0);
+      const due = Math.max(total - prepaymentValue - paid, 0);
       const payValue = parseInputNumber(payAmountInput);
       const amount = Number.isFinite(payValue) && payValue > 0 ? payValue : due;
+      const normalizedAmount = amount > 0 ? amount : 0;
+      if (normalizedAmount <= 0) {
+        const resolved = await ensureSavedOrder("PAYED", payments);
+        setShowPaymentsModal(false);
+        setShowInvoiceModal(true);
+        try {
+          await generatePdfAndUpload(resolved ?? undefined);
+        } catch {
+          if (resolved) {
+            const ticket = mapOrderToTicket(resolved.order, new Date().toISOString());
+            const blob = await generateTicketPdfBlob(ticket);
+            downloadBlob(blob, `ticket-${resolved.id}.pdf`);
+          }
+        }
+        return;
+      }
       const newPayment: Payment = {
         id: Date.now(),
         date: orderDate || todayString,
         method: payMethod,
-        amount: amount > 0 ? amount : due,
+        amount: normalizedAmount,
       };
       const nextPayments = [...payments, newPayment];
       setPayments(nextPayments);
@@ -992,11 +1072,11 @@ export const WorkOrderPage = () => {
 
   useEffect(() => {
     if (showPaymentsModal) {
-      const due = Math.max(total - paid, 0);
+      const due = Math.max(outstanding, 0);
       setPayAmountInput(formatSummary(due).replace(/\s/g, ""));
       setPayMethod("cash");
     }
-  }, [showPaymentsModal, total, paid]);
+  }, [showPaymentsModal, outstanding]);
 
   const handleKeypad = (val: string) => {
     setPayAmountInput((prev) => {
@@ -1033,15 +1113,18 @@ export const WorkOrderPage = () => {
   const handlePendingPaymentConfirm = async () => {
     try {
       setPdfLoading(true);
-      const due = Math.max(total - paid, 0);
-      const payment: Payment = {
-        id: Date.now(),
-        date: orderDate || todayString,
-        method: payMethod === "later" ? "cash" : payMethod,
-        amount: due,
-      };
-      const nextPayments = [...payments, payment];
-      setPayments(nextPayments);
+      const due = Math.max(total - prepaymentValue - paid, 0);
+      const payment: Payment | null =
+        due > 0
+          ? {
+              id: Date.now(),
+              date: orderDate || todayString,
+              method: payMethod === "later" ? "cash" : payMethod,
+              amount: due,
+            }
+          : null;
+      const nextPayments = payment ? [...payments, payment] : payments;
+      if (payment) setPayments(nextPayments);
 
       const resolved = await ensureSavedOrder("PAYED", nextPayments);
       setStatus("PAYED");
@@ -1715,6 +1798,12 @@ export const WorkOrderPage = () => {
                   </span>
                 </div>
               ) : null}
+              <div className="flex items-center justify-between text-[#555555]">
+                <span>Предоплата:</span>
+                <span className="font-semibold text-[#222222]">
+                  {formatSummary(prepaymentValue)} руб.
+                </span>
+              </div>
               <div className="flex items-center justify-between border-t border-[#ededed] pt-2 text-[16px] font-bold text-[#111111]">
                 <span>Всего:</span>
                 <span>{formatSummary(total)} руб.</span>
@@ -1722,6 +1811,15 @@ export const WorkOrderPage = () => {
             </div>
 
             <div className="mt-4 flex flex-col gap-2">
+              <button
+                className="rounded-md w-full border border-[#d6d6d6] bg-[#f5f5f5] px-4 py-2 text-[14px] font-semibold text-[#2c2c2c] shadow-sm hover:bg-[#ededed]"
+                onClick={() => {
+                  setPrepaymentDraft(prepaymentInput);
+                  setShowPrepaymentModal(true);
+                }}
+              >
+                Предоплата
+              </button>
               {status === "PAYED" ? (
                 <button
                   className="rounded-md w-full border border-[#4a6aff] bg-[#e8edff] px-4 py-2 text-[14px] font-semibold text-[#1c2a80] shadow-sm hover:bg-[#dbe4ff]"
@@ -1816,6 +1914,8 @@ export const WorkOrderPage = () => {
         parseInputNumber={parseInputNumber}
         total={total}
         paid={paid}
+        prepayment={prepaymentValue}
+        outstanding={outstanding}
         servicesTotal={servicesTotal}
         partsTotal={partsTotal}
         discountValue={discountValue}
@@ -1827,6 +1927,49 @@ export const WorkOrderPage = () => {
         smallBtn={smallBtn}
         payButtonLabel={payMethod === "later" ? "Отсрочка платежа" : "Оплатить"}
       />
+      {showPrepaymentModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-3" onClick={() => setShowPrepaymentModal(false)}>
+          <div
+            className="w-full max-w-md rounded-xl border border-[#dcdcdc] bg-white p-4 shadow-lg"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between">
+              <h3 className="text-lg font-semibold text-[#1f1f1f]">Предоплата</h3>
+              <button className={`${ghostBtn} ${smallBtn} rounded-md`} onClick={() => setShowPrepaymentModal(false)}>
+                Закрыть
+              </button>
+            </div>
+            <div className="mt-3 space-y-2 text-sm text-[#444]">
+              <label className="flex flex-col gap-1">
+                <span className="font-semibold text-[#2c2c2c]">Сумма предоплаты</span>
+                <input
+                  className="w-full rounded-md border border-[#c3c3c3] bg-white px-3 py-2 text-[14px] focus:outline-none"
+                  value={prepaymentDraft}
+                  onChange={(e) => setPrepaymentDraft(e.target.value)}
+                  inputMode="decimal"
+                />
+              </label>
+              <p className="text-[12px] text-[#777]">Эта сумма будет вычитаться при финальной оплате.</p>
+            </div>
+            <div className="mt-4 flex justify-end gap-2">
+              <button className={`${ghostBtn} ${smallBtn} rounded-md`} onClick={() => setShowPrepaymentModal(false)}>
+                Отмена
+              </button>
+              <button
+                className="rounded-md border border-[#1f8f3a] bg-[#1fad4c] px-4 py-2 text-[14px] font-semibold text-white shadow-sm hover:bg-[#179340]"
+                onClick={() => {
+                  const val = parseInputNumber(prepaymentDraft);
+                  const safe = Number.isFinite(val) && val > 0 ? val : 0;
+                  setPrepaymentInput(String(safe));
+                  setShowPrepaymentModal(false);
+                }}
+              >
+                Принять
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
       {showInvoiceModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-3" onClick={() => setShowInvoiceModal(false)}>
           <div

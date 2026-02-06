@@ -10,9 +10,12 @@ const sumLineItems = (items: { qty: number; price: number }[] = []) => items.red
 const computeTotal = (order: OrderPayload) => {
   const services = sumLineItems(order.services ?? []);
   const parts = sumLineItems(order.parts ?? []);
-  const subtotal = services + parts;
-  const discount = typeof order.discountAmount === "number" && order.discountAmount ? order.discountAmount : ((order.discountPercent ?? 0) / 100) * subtotal;
-  return Math.max(subtotal - (discount || 0), 0);
+  const discountBase = services;
+  const discountAmount = typeof order.discountAmount === "number" && order.discountAmount ? order.discountAmount : 0;
+  const discountPercent = order.discountPercent ?? 0;
+  const discountFromPercent = (discountBase * discountPercent) / 100;
+  const discountValue = Math.min(Math.max(discountAmount > 0 ? discountAmount : discountFromPercent, 0), discountBase);
+  return Math.max(discountBase - discountValue, 0) + parts;
 };
 
 const hasDraftContent = (draft: Partial<OrderPayload>) =>
@@ -28,7 +31,8 @@ const hasDraftContent = (draft: Partial<OrderPayload>) =>
         (draft.services && draft.services.length) ||
         (draft.parts && draft.parts.length) ||
         (draft.payments && draft.payments.length) ||
-        (draft.mileage && draft.mileage > 0)),
+        (draft.mileage && draft.mileage > 0) ||
+        (typeof draft.prepayment === "number" && draft.prepayment > 0)),
   );
 
 const mergeDraft = (order: OrderPayload): OrderPayload => {
@@ -45,6 +49,7 @@ const mergeDraft = (order: OrderPayload): OrderPayload => {
       services: draft.services ?? order.services ?? [],
       parts: draft.parts ?? order.parts ?? [],
       payments: draft.payments ?? order.payments ?? [],
+      prepayment: draft.prepayment ?? order.prepayment ?? 0,
     };
   } catch {
     return order;

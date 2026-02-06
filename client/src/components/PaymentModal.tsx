@@ -11,6 +11,8 @@ type PaymentModalProps = {
   parseInputNumber: (value: string) => number;
   total: number;
   paid: number;
+  prepayment: number;
+  outstanding: number;
   servicesTotal: number;
   partsTotal: number;
   discountValue: number;
@@ -34,6 +36,8 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
   parseInputNumber,
   total,
   paid,
+  prepayment,
+  outstanding,
   servicesTotal,
   partsTotal,
   discountValue,
@@ -94,7 +98,7 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
               <div className="flex items-center justify-between">
                 <span className="text-[#555555]">Сдача</span>
                 <span className="text-[14px] font-semibold text-[#1f1f1f]">
-                  {Math.max(parseInputNumber(payAmountInput) - Math.max(total - paid, 0), 0).toLocaleString("ru-RU", {
+                  {Math.max(parseInputNumber(payAmountInput) - Math.max(outstanding, 0), 0).toLocaleString("ru-RU", {
                     minimumFractionDigits: 2,
                   })}{" "}
                   руб.
@@ -162,10 +166,22 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
                       <span className="font-semibold text-[#1f1f1f]">- {discountValue.toLocaleString("ru-RU")} руб.</span>
                     </div>
                   )}
+                  <div className="flex justify-between">
+                    <span className="text-[#555555]">Предоплата</span>
+                    <span className="font-semibold text-[#1f1f1f]">
+                      {prepayment.toLocaleString("ru-RU", { minimumFractionDigits: 2 })} руб.
+                    </span>
+                  </div>
                   <div className="mt-1 flex justify-between border-t border-[#ededed] pt-1">
-                    <span className="text-[#555555]">К оплате</span>
-                    <span className="text-[16px] font-bold text-[#1f1f1f]">
-                      {Math.max(total - paid, 0).toLocaleString("ru-RU", { minimumFractionDigits: 2 })} руб.
+                    <span className="text-[#555555]">Остаток к оплате</span>
+                    <span className="text-[16px] font-bold text-[#008000]">
+                      {Math.max(outstanding, 0).toLocaleString("ru-RU", { minimumFractionDigits: 2 })} руб.
+                    </span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-[#555555]">Итого заказ</span>
+                    <span className="text-[16px] font-semibold text-[#1f1f1f]">
+                      {total.toLocaleString("ru-RU", { minimumFractionDigits: 2 })} руб.
                     </span>
                   </div>
                   {paid > 0 && (

@@ -29,6 +29,7 @@ export type OrderPayload = {
   govNumber?: string;
   vinNumber?: string;
   phone?: string | null;
+  prepayment?: number | null;
   discountPercent?: number | null;
   discountAmount?: number | null;
   pdfUrl?: string | null;

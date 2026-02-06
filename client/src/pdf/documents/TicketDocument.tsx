@@ -258,7 +258,7 @@ export const TicketDocument = ({ ticket }: { ticket: Ticket }) => {
   const servicesTotal = services.reduce((a, i) => a + i.qty * i.price, 0);
   const parts = ticket.parts ?? [];
   const partsTotal = parts.reduce((a, i) => a + i.qty * i.price, 0);
-  const subtotal = servicesTotal + partsTotal;
+  const discountBase = servicesTotal;
 
   const discountPercentRaw = ticket.discountPercent ?? 0;
   const discountPercent = Number.isFinite(Number(discountPercentRaw)) ? Number(discountPercentRaw) : 0;
@@ -266,9 +266,9 @@ export const TicketDocument = ({ ticket }: { ticket: Ticket }) => {
   const discountAmountNum = Number(discountAmountRaw);
   const hasAmount = Number.isFinite(discountAmountNum) && discountAmountNum > 0;
   const discountAmount = hasAmount ? discountAmountNum : 0;
-  const discountFromPercent = discountPercent ? (subtotal * discountPercent) / 100 : 0;
-  const discountValue = Math.min(hasAmount ? discountAmount : discountFromPercent, subtotal);
-  const grandTotal = Math.max(subtotal - discountValue, 0);
+  const discountFromPercent = discountPercent ? (discountBase * discountPercent) / 100 : 0;
+  const discountValue = Math.min(hasAmount ? discountAmount : discountFromPercent, discountBase);
+  const grandTotal = Math.max(discountBase - discountValue, 0) + partsTotal;
 
   const issuedAt = formatIssuedAt(ticket.issuedAt);
   const number = ticket.number ?? ticket.id ?? "";
